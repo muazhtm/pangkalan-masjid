@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, tx, ROOT, DATA_DIR, UPLOAD_DIR, today, nowKL, addMonths, addDays } from './db.js';
 import {
-  JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, LALAI,
+  JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, JENIS_BARANG, PENGGUNAAN, LALAI, selangFilter,
   hayatKarpet, cuciAwalHari, waMesej, labelStatus, semuaTetapan, simpanTetapan,
 } from './config.js';
 import { txt, intOrNull, posId, dateOrNull, arr, waNumber, parseCsv, csvCell, likeEscape, senOrNull, fmtRM } from './util.js';
@@ -118,8 +118,24 @@ function tindakanHariIni() {
     .filter((t) => t.due <= limit)
     .sort((a, b) => a.due.localeCompare(b.due))
     .forEach((t) => items.push({ kind: 'cuci', id: t.id, nama: t.nama, tarikh: t.due, sub: `Cucian terakhir ${t.terakhir_cuci} · setiap ${t.kitaran_cuci_bulan} bulan` }));
+  // Filter beg vacuum: tarikh terakhir beli + selang
+  db.prepare(`SELECT t.id, t.nama, b.butiran, b.filter_terakhir, b.selang_filter_bulan FROM barang b JOIN tempat t ON t.id = b.tempat_id
+              WHERE b.jenis = 'Vacuum' AND b.penggunaan = 'Digunakan' AND b.filter_terakhir IS NOT NULL`)
+    .all()
+    .map((r) => ({ ...r, due: addMonths(r.filter_terakhir, r.selang_filter_bulan || selangFilter()) }))
+    .filter((r) => r.due <= limit)
+    .sort((a, b) => a.due.localeCompare(b.due))
+    .forEach((r) => items.push({ kind: 'filter', id: r.id, nama: r.nama, tarikh: r.due, model: r.butiran, sub: `Filter beg ${r.butiran || 'vacuum'} · dibeli ${r.filter_terakhir}` }));
   const tahunIni = Number(tarikh.slice(0, 4));
   const hayat = hayatKarpet();
+  // Karpet yang kita pasang: guna tarikh pasang sebenar
+  const adaTarikhPasang = new Set();
+  for (const r of db.prepare(`SELECT t.id, t.nama, t.status, b.butiran, b.tarikh FROM barang b JOIN tempat t ON t.id = b.tempat_id
+                               WHERE b.jenis = 'Karpet' AND b.tarikh IS NOT NULL AND t.status != 'Tidak berminat'`).all()) {
+    adaTarikhPasang.add(r.id);
+    const due = addMonths(r.tarikh, hayat * 12);
+    if (due <= tarikh) items.push({ kind: 'tukar', id: r.id, nama: r.nama, status: r.status, sub: `${r.butiran || 'Karpet'} dipasang ${r.tarikh.split('-').reverse().join('/')} (${hayat} tahun)` });
+  }
   const rows = db.prepare(
     `SELECT t.id, t.nama, t.status, l.keadaan, l.tahun_pasang, l.tarikh
      FROM tempat t JOIN lawatan l ON l.id = (SELECT id FROM lawatan WHERE tempat_id = t.id ORDER BY tarikh DESC, id DESC LIMIT 1)
@@ -128,7 +144,7 @@ function tindakanHariIni() {
   for (const r of rows) {
     const reasons = [];
     if (r.keadaan === 'Rosak') reasons.push(`Karpet rosak (lawatan ${r.tarikh.split('-').reverse().join('/')})`);
-    if (r.tahun_pasang && r.tahun_pasang + hayat <= tahunIni) reasons.push(`Dipasang ± ${r.tahun_pasang} (${tahunIni - r.tahun_pasang} tahun)`);
+    if (!adaTarikhPasang.has(r.id) && r.tahun_pasang && r.tahun_pasang + hayat <= tahunIni) reasons.push(`Dipasang ± ${r.tahun_pasang} (${tahunIni - r.tahun_pasang} tahun)`);
     if (reasons.length) items.push({ kind: 'tukar', id: r.id, nama: r.nama, status: r.status, sub: reasons.join(' · ') });
   }
   return { tarikh, items };
@@ -229,7 +245,8 @@ function loadDetail(id) {
   }));
   const logs = db.prepare('SELECT * FROM log WHERE tempat_id = ? ORDER BY waktu DESC, id DESC LIMIT 50').all(t.id);
   const dokumen = db.prepare('SELECT * FROM dokumen WHERE tempat_id = ? ORDER BY tarikh DESC, id DESC').all(t.id);
-  return { t, pics, lawatan, logs, dokumen, tarikh: today() };
+  const barang = db.prepare("SELECT * FROM barang WHERE tempat_id = ? ORDER BY penggunaan = 'Tidak digunakan lagi', jenis, id").all(t.id);
+  return { t, pics, lawatan, logs, dokumen, barang, tarikh: today(), selang: selangFilter() };
 }
 
 app.get('/tempat/:id', (req, res) => {
@@ -526,6 +543,78 @@ app.get('/dokumen/:id/fail', (req, res) => {
   res.sendFile(path.join(UPLOAD_DIR, r.k.fail), (e) => e && !res.headersSent && res.sendStatus(404));
 });
 
+
+// ---------- Barang dibekalkan (karpet & vacuum) ----------
+function parseBarang(b) {
+  const num = (v) => { const n = Number.parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) && n > 0 ? n : null; };
+  const d = {
+    jenis: JENIS_BARANG.includes(b.jenis) ? b.jenis : null,
+    butiran: txt(b.butiran, 150),
+    unit: intOrNull(b.unit),
+    keluasan_kp: num(b.keluasan_kp),
+    tarikh: dateOrNull(b.tarikh),
+    waranti_hingga: dateOrNull(b.waranti_hingga),
+    penggunaan: PENGGUNAAN.includes(b.penggunaan) ? b.penggunaan : 'Digunakan',
+    filter_terakhir: dateOrNull(b.filter_terakhir),
+    selang_filter_bulan: intOrNull(b.selang_filter_bulan),
+    catatan: txt(b.catatan, 1000),
+  };
+  if (d.unit !== null && (d.unit < 1 || d.unit > 99)) d.unit = null;
+  if (d.selang_filter_bulan !== null && (d.selang_filter_bulan < 1 || d.selang_filter_bulan > 36)) d.selang_filter_bulan = null;
+  if (d.jenis === 'Karpet') { d.unit = null; d.filter_terakhir = null; d.selang_filter_bulan = null; }
+  if (d.jenis === 'Vacuum') d.keluasan_kp = null;
+  return { d, error: d.jenis ? '' : 'Pilih jenis barang.' };
+}
+const BARANG_COLS = ['jenis', 'butiran', 'unit', 'keluasan_kp', 'tarikh', 'waranti_hingga', 'penggunaan', 'filter_terakhir', 'selang_filter_bulan', 'catatan'];
+function loadBarang(req, res) {
+  const id = posId(req.params.id);
+  const k = id && db.prepare('SELECT * FROM barang WHERE id = ?').get(id);
+  if (!k) { res.status(404).send(V.messagePage('Tidak dijumpai', 'Barang tidak wujud.')); return null; }
+  return { k, t: db.prepare('SELECT * FROM tempat WHERE id = ?').get(k.tempat_id) };
+}
+app.get('/tempat/:id/barang/baru', (req, res) => {
+  const t = loadTempat(req, res);
+  if (t) res.send(V.barangFormPage(t, { jenis: JENIS_BARANG.includes(req.query.jenis) ? req.query.jenis : 'Vacuum', penggunaan: 'Digunakan' }, '', selangFilter()));
+});
+app.post('/tempat/:id/barang', (req, res) => {
+  const t = loadTempat(req, res);
+  if (!t) return;
+  const { d, error } = parseBarang(req.body);
+  if (error) return res.status(400).send(V.barangFormPage(t, req.body, error, selangFilter()));
+  db.prepare(`INSERT INTO barang (tempat_id,${BARANG_COLS.join(',')}) VALUES (?${',?'.repeat(BARANG_COLS.length)})`).run(t.id, ...BARANG_COLS.map((k) => d[k]));
+  res.redirect(303, `/tempat/${t.id}`);
+});
+app.get('/barang/:id/edit', (req, res) => {
+  const r = loadBarang(req, res);
+  if (r) res.send(V.barangFormPage(r.t, r.k, '', selangFilter()));
+});
+app.post('/barang/:id', (req, res) => {
+  const r = loadBarang(req, res);
+  if (!r) return;
+  const { d, error } = parseBarang(req.body);
+  if (error) return res.status(400).send(V.barangFormPage(r.t, { ...req.body, id: r.k.id }, error, selangFilter()));
+  db.prepare(`UPDATE barang SET ${BARANG_COLS.map((k) => k + '=?').join(',')} WHERE id=?`).run(...BARANG_COLS.map((k) => d[k]), r.k.id);
+  res.redirect(303, `/tempat/${r.t.id}`);
+});
+app.post('/barang/:id/filter', (req, res) => {
+  const r = loadBarang(req, res);
+  if (!r) return;
+  if (r.k.jenis !== 'Vacuum') return res.status(400).send(V.messagePage('Tidak sah', 'Hanya untuk vacuum.'));
+  const tarikh = dateOrNull(req.body.tarikh) || today();
+  tx(() => {
+    db.prepare(`UPDATE barang SET filter_terakhir=?, penggunaan='Digunakan' WHERE id=?`).run(tarikh, r.k.id);
+    db.prepare('INSERT INTO log (tempat_id,waktu,saluran,tujuan,ringkasan) VALUES (?,?,?,?,?)')
+      .run(r.t.id, nowKL(), 'Lain-lain', TUJUAN.vacuum, `Filter beg ${r.k.butiran || 'vacuum'} dibeli (${tarikh})`);
+  });
+  res.redirect(303, `/tempat/${r.t.id}`);
+});
+app.post('/barang/:id/padam', (req, res) => {
+  const r = loadBarang(req, res);
+  if (!r) return;
+  db.prepare('DELETE FROM barang WHERE id = ?').run(r.k.id);
+  res.redirect(303, `/tempat/${r.t.id}`);
+});
+
 // ---------- Data: import / eksport / sandaran ----------
 app.get('/data', (req, res) => res.send(V.dataPage()));
 app.get('/import', (req, res) => res.redirect(303, '/data'));
@@ -539,6 +628,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const PIC_N = ['', ...Array.from({ length: 9 }, (_, i) => String(i + 2))]; // pic, pic2..pic10
   const names = ['nama', 'jenis', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci'];
   for (const n of PIC_N) names.push('pic' + n, 'jawatan_pic' + n, 'telefon_pic' + n);
+  names.push('vacuum_model', 'vacuum_unit', 'vacuum_tarikh_beli', 'vacuum_penggunaan', 'vacuum_filter_terakhir', 'vacuum_catatan', 'karpet_jenis', 'karpet_kp', 'karpet_tarikh_pasang', 'karpet_waranti_hingga');
   const c = Object.fromEntries(names.map((n) => [n, col(n)]));
   if (c.nama < 0) return res.status(400).send(V.messagePage('Lajur "nama" tiada', 'Baris pertama mesti ada lajur bernama nama.'));
   const get = (r, k, max) => (c[k] >= 0 ? txt(r[c[k]], max) : null);
@@ -546,8 +636,40 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const statusMap = new Map();
   for (const s of STATUS) { statusMap.set(s.toLowerCase(), s); statusMap.set(labelStatus(s).toLowerCase(), s); }
 
-  const out = { tambah: 0, langkau: 0, amaran: [] };
+  const tambahKeSedia = req.body.kemas === '1';
+  const out = { tambah: 0, langkau: 0, dikemas: 0, amaran: [] };
   const exists = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?) AND lower(coalesce(daerah, \'\')) = lower(?)');
+  const byName = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?)');
+  const picTels = db.prepare('SELECT telefon FROM pic WHERE tempat_id = ?');
+  const digits = (v) => String(v || '').replace(/\D/g, '').replace(/^60/, '0');
+  const insBarang = db.prepare('INSERT INTO barang (tempat_id,jenis,butiran,unit,keluasan_kp,tarikh,waranti_hingga,penggunaan,filter_terakhir,catatan) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const adaBarang = db.prepare("SELECT 1 FROM barang WHERE tempat_id = ? AND jenis = ? AND lower(coalesce(butiran, '')) = lower(?)");
+  const addExtras = (id, r) => {
+    const ada = new Set(picTels.all(id).map((p) => digits(p.telefon)).filter(Boolean));
+    let n = 0;
+    for (const k of PIC_N) {
+      const pn = get(r, 'pic' + k, 100), pt = get(r, 'telefon_pic' + k, 40);
+      if (!pn && !pt) continue;
+      if (pt && ada.has(digits(pt))) continue;
+      insPic.run(id, pn, get(r, 'jawatan_pic' + k, 100), pt);
+      if (pt) ada.add(digits(pt));
+      n++;
+    }
+    const vm = get(r, 'vacuum_model', 150), vu = intOrNull(get(r, 'vacuum_unit'));
+    if ((vm || vu) && !adaBarang.get(id, 'Vacuum', vm || '')) {
+      const pg = get(r, 'vacuum_penggunaan');
+      insBarang.run(id, 'Vacuum', vm, vu && vu > 0 && vu < 100 ? vu : null, null, dateOrNull(get(r, 'vacuum_tarikh_beli')), null,
+        PENGGUNAAN.includes(pg) ? pg : 'Tidak pasti', dateOrNull(get(r, 'vacuum_filter_terakhir')), get(r, 'vacuum_catatan', 1000));
+      n++;
+    }
+    const kj = get(r, 'karpet_jenis', 150), kt = dateOrNull(get(r, 'karpet_tarikh_pasang'));
+    if ((kj || kt) && !adaBarang.get(id, 'Karpet', kj || '')) {
+      const kp = Number.parseFloat(String(get(r, 'karpet_kp') || '').replace(/,/g, ''));
+      insBarang.run(id, 'Karpet', kj, null, Number.isFinite(kp) && kp > 0 ? kp : null, kt, dateOrNull(get(r, 'karpet_waranti_hingga')), 'Digunakan', null, null);
+      n++;
+    }
+    return n;
+  };
   const ins = db.prepare('INSERT INTO tempat (jenis,nama,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci) VALUES (?,?,?,?,?,?,?,?,?)');
   const insPic = db.prepare('INSERT INTO pic (tempat_id,nama,jawatan,telefon) VALUES (?,?,?,?)');
   tx(() => {
@@ -555,7 +677,11 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       const nama = get(r, 'nama', 200);
       if (!nama) { out.langkau++; out.amaran.push(`Baris ${i + 2}: tiada nama`); return; }
       const daerah = get(r, 'daerah', 100);
-      if (exists.get(nama, daerah || '')) { out.langkau++; return; }
+      if (tambahKeSedia) {
+        const m = byName.all(nama);
+        if (m.length > 1) { out.langkau++; out.amaran.push(`Baris ${i + 2}: "${nama}" ada ${m.length} rekod sama nama, dilangkau`); return; }
+        if (m.length === 1) { addExtras(m[0].id, r); out.dikemas++; return; }
+      } else if (exists.get(nama, daerah || '')) { out.langkau++; return; }
       const jenisRaw = (get(r, 'jenis') || nama).toLowerCase();
       const jenis = /surau/.test(jenisRaw) ? 'Surau' : 'Masjid';
       const stRaw = get(r, 'status');
@@ -564,10 +690,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       let kitaran = intOrNull(get(r, 'kitaran_cuci_bulan'));
       if (kitaran !== null && (kitaran < 1 || kitaran > 60)) kitaran = null;
       const id = ins.run(jenis, nama, daerah, get(r, 'alamat'), get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci'))).lastInsertRowid;
-      for (const n of PIC_N) {
-        const pn = get(r, 'pic' + n, 100), pt = get(r, 'telefon_pic' + n, 40);
-        if (pn || pt) insPic.run(id, pn, get(r, 'jawatan_pic' + n, 100), pt);
-      }
+      addExtras(id, r);
       out.tambah++;
     });
   });
@@ -628,6 +751,9 @@ app.post('/tetapan', (req, res) => {
   const awal = intOrNull(b.cuci_awal_hari);
   if (awal === null || awal < 0 || awal > 120) errs.push('Hari peringatan mesti 0 hingga 120.');
   else out.cuci_awal_hari = String(awal);
+  const sf = intOrNull(b.selang_filter_bulan ?? LALAI.selang_filter_bulan);
+  if (sf === null || sf < 1 || sf > 36) errs.push('Selang filter mesti 1 hingga 36 bulan.');
+  else out.selang_filter_bulan = String(sf);
   const labels = STATUS.map((s, i) => txt(b[`status_${i}`], 40) || s);
   if (new Set(labels.map((l) => l.toLowerCase())).size !== labels.length) errs.push('Nama status tidak boleh sama.');
   else labels.forEach((l, i) => (out[`status_${i}`] = l));

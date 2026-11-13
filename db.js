@@ -118,6 +118,25 @@ const migrations = [
   },
   // v2 -> v3: perkhidmatan bagi setiap dokumen (Karpet baharu / Cuci karpet / Vacuum / Lain-lain)
   () => db.exec('ALTER TABLE dokumen ADD COLUMN perkhidmatan TEXT'),
+  // v3 -> v4: barang dibekalkan (karpet & vacuum). Bukan sistem stok.
+  () => db.exec(`
+    CREATE TABLE barang (
+      id INTEGER PRIMARY KEY,
+      tempat_id INTEGER NOT NULL REFERENCES tempat(id) ON DELETE CASCADE,
+      jenis TEXT NOT NULL CHECK (jenis IN ('Karpet','Vacuum')),
+      butiran TEXT,            -- jenis/jenama karpet atau model vacuum
+      unit INTEGER,            -- bilangan unit vacuum
+      keluasan_kp REAL,        -- karpet: kaki persegi
+      tarikh TEXT,             -- karpet: tarikh pasang; vacuum: tarikh beli
+      waranti_hingga TEXT,
+      penggunaan TEXT NOT NULL DEFAULT 'Digunakan' CHECK (penggunaan IN ('Digunakan','Tidak pasti','Tidak digunakan lagi')),
+      filter_terakhir TEXT,    -- vacuum: tarikh filter beg terakhir dibeli
+      selang_filter_bulan INTEGER,
+      catatan TEXT,
+      dicipta TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX idx_barang_tempat ON barang(tempat_id);
+  `),
 ];
 
 const ver = db.prepare('PRAGMA user_version').get().user_version;

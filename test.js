@@ -326,6 +326,46 @@ await ok('sandaran penuh tar.gz ada db + lampiran', async () => {
   assert.equal(b.subarray(257, 262).toString(), 'ustar');
 });
 
+console.log('Barang dibekalkan');
+await ok('vacuum: filter lewat masuk Hari ini, Filter dibeli padam peringatan', async () => {
+  const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Vakum Uji', status: 'Pelanggan' }));
+  const vid = idFrom(r.headers.get('location'));
+  const b = await req(`/tempat/${vid}/barang`, form({ jenis: 'Vacuum', butiran: 'SEBO BS36', unit: '2', penggunaan: 'Digunakan', filter_terakhir: dateOffset(-200) }));
+  assert.equal(b.status, 303);
+  let home = await (await req('/')).text();
+  assert.ok(home.includes('Masjid Vakum Uji') && home.includes('Filter beg SEBO BS36'));
+  const det = await (await req(`/tempat/${vid}`)).text();
+  assert.ok(det.includes('Barang dibekalkan') && det.includes('SEBO BS36'));
+  const bid = det.match(/\/barang\/(\d+)\/filter/)[1];
+  assert.equal((await req(`/barang/${bid}/filter`, form({}))).status, 303);
+  home = await (await req('/')).text();
+  assert.ok(!home.includes('Filter beg SEBO BS36'), 'peringatan hilang selepas beli');
+  assert.ok((await (await req(`/tempat/${vid}`)).text()).includes('Filter beg SEBO BS36 dibeli'));
+});
+await ok('vacuum Tidak pasti: tiada peringatan; karpet guna tarikh pasang', async () => {
+  const r = await req('/tempat', form({ jenis: 'Surau', nama: 'Surau Karpet Uji', status: 'Pelanggan' }));
+  const sid = idFrom(r.headers.get('location'));
+  await req(`/tempat/${sid}/barang`, form({ jenis: 'Vacuum', butiran: 'SEBO Lama', penggunaan: 'Tidak pasti', filter_terakhir: dateOffset(-400) }));
+  await req(`/tempat/${sid}/barang`, form({ jenis: 'Karpet', butiran: 'Karpet Turki', keluasan_kp: '5000', tarikh: '2012-03-01' }));
+  const home = await (await req('/')).text();
+  assert.ok(!home.includes('Filter beg SEBO Lama'));
+  assert.ok(home.includes('Karpet Turki dipasang 01/03/2012'));
+  assert.equal((await req(`/tempat/${sid}/barang`, form({ jenis: 'Kerusi' }))).status, 400);
+});
+await ok('import kemas: tambah ke rekod sedia ada, tiada pendua', async () => {
+  const csv = 'nama,pic,jawatan_pic,telefon_pic,vacuum_model,vacuum_unit,vacuum_catatan\nmasjid vakum uji,Hj Baru,PIC vacuum,0171112222,SEBO,3,Senarai 2024\nMasjid Baru SEBO,,,,SEBO,1,\n';
+  const send = async () => { const fd = new FormData(); fd.set('kemas', '1'); fd.append('fail', new Blob([csv]), 'x.csv'); return (await req('/import', { method: 'POST', body: fd })).text(); };
+  const html = await send();
+  assert.match(html, /<b>1<\/b> rekod ditambah/);
+  await send();
+  const list = await (await req('/tempat?q=Vakum%20Uji')).text();
+  const vid = list.match(/\/tempat\/(\d+)"/)[1];
+  const det = await (await req(`/tempat/${vid}`)).text();
+  assert.equal(det.split('Hj Baru').length - 1, 1, 'PIC tidak berganda');
+  assert.equal((det.match(/Senarai 2024/g) || []).length, 1, 'vacuum tidak berganda');
+  assert.equal((await (await req('/tempat?q=Baru%20SEBO')).text()).split('Masjid Baru SEBO').length > 1, true);
+});
+
 console.log('Padam');
 await ok('padam lawatan buang fail foto', async () => {
   const html = await (await req(`/tempat/${id}`)).text();

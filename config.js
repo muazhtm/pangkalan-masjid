@@ -8,6 +8,8 @@ export const KEADAAN = ['Baik', 'Sederhana', 'Rosak', 'Tiada karpet'];
 export const SALURAN = ['WhatsApp', 'Telefon', 'Lawatan', 'Dokumen', 'Lain-lain'];
 export const STATUS_PIC = ['Aktif', 'Bukan PIC lagi', 'Minta jangan hubungi'];
 export const JENIS_DOK = ['Quotation', 'Invois', 'Laporan kerja'];
+export const JENIS_BARANG = ['Karpet', 'Vacuum'];
+export const PENGGUNAAN = ['Digunakan', 'Tidak pasti', 'Tidak digunakan lagi'];
 
 // Tujuan hubungan / produk yang ditawar (label pendek ikut rekaan)
 export const TUJUAN = {
@@ -27,6 +29,7 @@ export const LALAI = {
   penghantar: process.env.NAMA_PENGHANTAR || 'Reza',
   hayat_karpet: String(process.env.HAYAT_KARPET || 8),
   cuci_awal_hari: '14',
+  selang_filter_bulan: '6',
   wa_karpet: `Assalamualaikum [PIC]. Saya [penghantar] dari ${SYARIKAT} (Seri Kembangan). Kami membekal dan memasang karpet masjid dan surau. Adakah [masjid] merancang menukar atau menambah karpet? Jika ada, boleh kami hantarkan sebut harga? ${TUTUP}`,
   wa_cuci: `Assalamualaikum [PIC]. Saya [penghantar] dari ${SYARIKAT} (Seri Kembangan). Kami menyediakan servis cucian karpet masjid dan surau. Adakah [masjid] memerlukan servis cucian karpet? ${TUTUP}`,
   wa_vacuum: `Assalamualaikum [PIC]. Saya [penghantar] dari ${SYARIKAT} (Seri Kembangan). Kami juga menjual mesin vacuum untuk kegunaan masjid dan surau. Adakah [masjid] berminat untuk mendapatkan maklumat dan harga? ${TUTUP}`,
@@ -49,6 +52,7 @@ export function simpanTetapan(obj) {
 
 export const hayatKarpet = () => Number(tetapan('hayat_karpet')) || 8;
 export const cuciAwalHari = () => Number(tetapan('cuci_awal_hari')) || 14;
+export const selangFilter = () => Number(tetapan('selang_filter_bulan')) || 6;
 
 // Nama paparan status (kanonik -> label)
 export function labelStatus(s) {

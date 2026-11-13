@@ -61,6 +61,18 @@
     sync(false);
   }
 
+  // Borang barang: papar medan ikut jenis (Karpet / Vacuum)
+  var bf = document.querySelector('form[data-barang]');
+  if (bf) {
+    var syncB = function () {
+      var j = (bf.querySelector('input[name=jenis]:checked') || {}).value;
+      bf.querySelectorAll('[data-k]').forEach(function (el) { el.style.display = j === 'Karpet' ? '' : 'none'; });
+      bf.querySelectorAll('[data-v]').forEach(function (el) { el.style.display = j === 'Vacuum' ? '' : 'none'; });
+    };
+    bf.addEventListener('change', syncB);
+    syncB();
+  }
+
   // Pratonton mesej WhatsApp di Tetapan
   var pengirim = document.querySelector('input[name=penghantar]');
   document.querySelectorAll('textarea[data-preview]').forEach(function (ta) {

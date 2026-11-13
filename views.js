@@ -1,5 +1,5 @@
 import { esc, waNumber, fmtRM } from './util.js';
-import { JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, labelStatus } from './config.js';
+import { JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, JENIS_BARANG, PENGGUNAAN, labelStatus } from './config.js';
 
 let currentUser = null;
 export const setUser = (u) => { currentUser = u; };
@@ -46,6 +46,8 @@ const I = {
   ulang: '<path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
   peta: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
   fail: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+  vacuum: '<path d="M5 20h9a4 4 0 0 0 0-8H9"/><path d="M9 12V4h3"/><circle cx="6" cy="20" r="1.5"/><circle cx="14" cy="20" r="1.5"/>',
+  karpet: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M7 5v14M17 5v14M3 12h18"/>',
   larang: '<circle cx="12" cy="12" r="10"/><path d="M4.9 4.9l14.2 14.2"/>',
 };
 const icon = (k, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[k]}</svg>`;
@@ -108,10 +110,11 @@ export function dashboardPage({ tarikh, items, stats, total, hayat, awal }) {
   const max = Math.max(1, ...STATUS.map((s) => stats[s] || 0));
   const COL = ['#B7C2B2', '#7FA886', '#4F8F5F', '#1E6B3F', '#C9942E', '#9AA39C'];
   const funnel = STATUS.map((s, i) => `<a class="fn${s === 'Tidak berminat' ? ' fn-last' : ''}${s === 'Pelanggan' ? ' fn-strong' : ''}" href="/tempat?status=${encodeURIComponent(s)}"><span>${esc(labelStatus(s))}</span><div class="fn-bar"><div style="--w:${Math.max(2, Math.round(((stats[s] || 0) / max) * 100))}%;--c:${COL[i]}"></div></div><b>${stats[s] || 0}</b></a>`).join('');
-  const ICON = { susulan: ['telefon', 'ic-merah'], cuci: ['titis', 'ic-biru'], tukar: ['ulang', 'ic-emas'] };
+  const ICON = { susulan: ['telefon', 'ic-merah'], cuci: ['titis', 'ic-biru'], tukar: ['ulang', 'ic-emas'], filter: ['vacuum', 'ic-biru'] };
   const row = (it) => {
     let sub;
     if (it.kind === 'susulan') sub = `Hubungi semula · ${bilaSusulan(it.tarikh, tarikh)}`;
+    else if (it.kind === 'filter') sub = `Filter beg ${esc(it.model || 'vacuum')} · ${it.tarikh < tarikh ? `<b class="err">${tarikhPendek(it.tarikh)} (lepas)</b>` : tarikhPendek(it.tarikh)}`;
     else if (it.kind === 'cuci') sub = `Cucian berkala · ${it.tarikh < tarikh ? `<b class="err">${tarikhPendek(it.tarikh)} (lepas)</b>` : tarikhPendek(it.tarikh)}`;
     else sub = esc(it.sub);
     const [ic, c] = it.kind === 'susulan' && it.tarikh === tarikh ? ['telefon', 'ic-hijau'] : ICON[it.kind];
@@ -128,7 +131,7 @@ export function dashboardPage({ tarikh, items, stats, total, hayat, awal }) {
 <section class="panel"><div class="row"><h2>Saluran jualan</h2><span class="muted small">Jumlah ${total}</span></div><div class="funnel">${funnel}</div></section>
 <section><h2>Tindakan hari ini</h2>
 ${shown.length ? `<div class="acts">${shown.map(row).join('')}</div>${items.length > shown.length ? `<p class="muted small">…dan ${items.length - shown.length} lagi.</p>` : ''}` : '<p class="panel">Tiada tindakan hari ini. Tetapkan <b>tarikh susulan</b> pada setiap masjid/surau supaya ia muncul di sini.</p>'}
-<p class="muted small">Termasuk: tarikh susulan yang tiba, cucian berkala (dipaparkan ${awal} hari lebih awal), dan karpet rosak atau berumur ${hayat} tahun ke atas (anggaran, ubah di Tetapan).</p>
+<p class="muted small">Termasuk: tarikh susulan yang tiba, filter beg vacuum, cucian berkala (dipaparkan ${awal} hari lebih awal), dan karpet rosak atau berumur ${hayat} tahun ke atas (anggaran, ubah di Tetapan).</p>
 </section></div>`;
   return layout('Hari ini', body, { active: 'hari', cls: 'dash' });
 }
@@ -230,6 +233,27 @@ function dokRow(k) {
 <div class="dok-a">${k.fail ? `<a href="/dokumen/${k.id}/fail" target="_blank" rel="noopener">Buka</a>` : ''}<a href="/dokumen/${k.id}/edit">Edit</a></div></div>`;
 }
 
+function barangRow(b, selang) {
+  const bits = [];
+  if (b.jenis === 'Vacuum') {
+    if (b.unit) bits.push(`${b.unit} unit`);
+    if (b.tarikh) bits.push(`dibeli ${tarikhMy(b.tarikh)}`);
+    if (b.filter_terakhir) {
+      const s = b.selang_filter_bulan || selang;
+      bits.push(`filter terakhir ${tarikhMy(b.filter_terakhir)} (setiap ${s} bulan)`);
+    } else bits.push('filter belum direkod');
+  } else {
+    if (b.keluasan_kp) bits.push(`${fmt(b.keluasan_kp)} kp`);
+    if (b.tarikh) bits.push(`dipasang ${tarikhMy(b.tarikh)}`);
+  }
+  if (b.waranti_hingga) bits.push(`waranti hingga ${tarikhMy(b.waranti_hingga)}`);
+  const pg = b.penggunaan !== 'Digunakan' ? ` <span class="badge ${b.penggunaan === 'Tidak pasti' ? 'b-dilawat' : 'b-tidak-berminat'}">${esc(b.penggunaan)}</span>` : '';
+  return `<div class="dok"><span class="dok-ic ${b.jenis === 'Vacuum' ? 'dk-q' : 'dk-l'}">${icon(b.jenis === 'Vacuum' ? 'vacuum' : 'karpet', 20)}</span><div class="grow"><div class="dok-t">${esc(b.jenis)}${b.butiran ? ' · ' + esc(b.butiran) : ''}${pg}</div><div class="muted small">${bits.join(' · ')}</div>${b.catatan ? `<div class="small">${esc(b.catatan)}</div>` : ''}</div>
+<div class="dok-a">${b.jenis === 'Vacuum' ? `<form method="post" action="/barang/${b.id}/filter" data-confirm="Rekod filter beg dibeli hari ini?"><button class="linklike sm-link">Filter dibeli</button></form>` : ''}<a href="/barang/${b.id}/edit">Edit</a></div></div>`;
+}
+const barangSection = (t, barang, selang) => `${barang.map((b) => barangRow(b, selang)).join('') || '<p class="muted small">Belum ada rekod karpet atau vacuum yang dibekalkan.</p>'}
+<div class="grid-2"><a class="btn ghost" href="/tempat/${t.id}/barang/baru?jenis=Vacuum">+ Vacuum</a><a class="btn ghost" href="/tempat/${t.id}/barang/baru?jenis=Karpet">+ Karpet</a></div>`;
+
 const logRow = (l) => `<div class="log"><div class="muted small">${esc(l.waktu)} · ${esc(l.saluran || '')}${l.tujuan ? ' · ' + esc(l.tujuan) : ''}</div>${esc(l.ringkasan || '')}</div>`;
 
 function lawatanBlock(l) {
@@ -266,7 +290,7 @@ ${bekas.length ? `<details class="panel bekas"><summary>Bekas PIC (${bekas.lengt
 <a class="link-strong" href="/tempat/${t.id}/pic/baru">+ Tambah PIC</a>`;
 }
 
-export function detailPage({ t, pics, lawatan, logs, dokumen, tarikh }) {
+export function detailPage({ t, pics, lawatan, logs, dokumen, barang, tarikh, selang }) {
   const { mapUrl, rows } = infoRows(t, lawatan, tarikh);
   const body = `<header class="ph">
 <div class="ph-top"><a class="ph-back" href="/tempat">‹ Senarai</a><a class="ph-btn" href="/tempat/${t.id}/edit">Edit</a></div>
@@ -287,6 +311,9 @@ ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
 <div class="stack-s">${dokumen.map(dokRow).join('')}
 <a class="btn ghost block" href="/tempat/${t.id}/dokumen/baru">+ Rekod dokumen dihantar</a></div></section>
 
+<section><h2>Barang dibekalkan</h2>
+<div class="stack-s">${barangSection(t, barang, selang)}</div></section>
+
 <section><h2>Log hubungan</h2>
 <a class="btn block" href="/tempat/${t.id}/log/baru">Catat hubungan</a>
 <div class="stack-s logs">${logs.map(logRow).join('') || '<p class="muted small">Belum ada log.</p>'}</div></section>
@@ -301,7 +328,7 @@ ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
 }
 
 // Panel kanan di Senarai (komputer)
-function detailPanel({ t, pics, lawatan, logs, dokumen, tarikh }) {
+function detailPanel({ t, pics, lawatan, logs, dokumen, barang, tarikh, selang }) {
   const { mapUrl, lw, rows } = infoRows(t, lawatan, tarikh);
   return `<div class="row top"><div><h2 class="m0">${esc(t.nama)}</h2><div class="muted small">${esc(t.jenis)}${t.daerah ? ' · ' + esc(t.daerah) : ''} ${badge(t.status)}</div></div>
 <div class="btns"><a class="btn ghost sm" href="/tempat/${t.id}/edit">Edit</a><a class="btn sm" href="/tempat/${t.id}">Buka penuh</a></div></div>
@@ -314,6 +341,7 @@ ${lw?.jenis_karpet ? `<span class="muted">Jenis karpet</span><span>${esc(lw.jeni
 ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
 <div><h3>WhatsApp</h3><div class="stack-s">${picSection(t, pics)}</div></div>
 <div><div class="row"><h3>Dokumen dihantar</h3><a class="btn ghost sm" href="/tempat/${t.id}/dokumen/baru">+ Rekod dokumen</a></div><div class="stack-s">${dokumen.map(dokRow).join('') || '<p class="muted small">Tiada.</p>'}</div></div>
+<div><h3>Barang dibekalkan</h3><div class="stack-s">${barangSection(t, barang, selang)}</div></div>
 <div><div class="row"><h3>Log hubungan</h3><a class="btn sm" href="/tempat/${t.id}/log/baru">Catat hubungan</a></div>${logs.slice(0, 8).map(logRow).join('') || '<p class="muted small">Belum ada log.</p>'}</div>`;
 }
 
@@ -408,16 +436,44 @@ ${actionBar(back, 'Simpan dokumen', 'f')}`;
   return layout('Dokumen', body, { active: 'senarai', cls: 'formpage' });
 }
 
+// ---------------- Barang dibekalkan ----------------
+export function barangFormPage(t, b, error = '', selang = 6) {
+  const back = `/tempat/${t.id}`;
+  const jenis = b.jenis || 'Vacuum';
+  const body = `${ph({ back, backText: t.nama, title: b.id ? 'Edit barang' : 'Barang dibekalkan', sub: 'Karpet atau vacuum yang kita bekalkan. Bukan sistem stok.' })}
+<form id="f" method="post" action="${b.id ? `/barang/${b.id}` : `/tempat/${t.id}/barang`}" class="form pad" data-barang>
+${errBox(error)}
+<fieldset><legend>Jenis</legend><div class="seg seg-2">${JENIS_BARANG.map((j) => `<label><input type="radio" name="jenis" value="${j}"${jenis === j ? ' checked' : ''}><span>${j}</span></label>`).join('')}</div></fieldset>
+<label><span data-k>Jenis / jenama karpet</span><span data-v>Model vacuum</span><input name="butiran" value="${esc(b.butiran)}" maxlength="150" placeholder="cth: SEBO BS36 / Al Mohainy"></label>
+<div class="grid-2">
+<label data-v>Bilangan unit<input type="number" name="unit" min="1" max="99" inputmode="numeric" value="${esc(b.unit)}"></label>
+<label data-k>Keluasan (kp)<input name="keluasan_kp" inputmode="decimal" value="${esc(b.keluasan_kp)}"></label>
+<label><span data-k>Tarikh pasang</span><span data-v>Tarikh beli</span><input type="date" name="tarikh" value="${esc(b.tarikh)}"></label>
+</div>
+<label>Waranti hingga (jika ada)<input type="date" name="waranti_hingga" value="${esc(b.waranti_hingga)}"></label>
+<fieldset data-v><legend>Filter beg</legend><div class="grid-2">
+<label>Terakhir dibeli<input type="date" name="filter_terakhir" value="${esc(b.filter_terakhir)}"></label>
+<label>Ulang beli setiap (bulan)<input type="number" name="selang_filter_bulan" min="1" max="36" inputmode="numeric" value="${esc(b.selang_filter_bulan)}" placeholder="lalai ${selang}"></label></div>
+<p class="muted small">Hari ini akan ingatkan awak sebelum filter mereka habis.</p></fieldset>
+<label>Masih digunakan?<select name="penggunaan">${opt(PENGGUNAAN, b.penggunaan || 'Digunakan')}</select></label>
+<label>Catatan<textarea name="catatan" rows="2" maxlength="1000" placeholder="cth: Repair motor Mac 2026">${esc(b.catatan)}</textarea></label>
+</form>
+${b.id ? `<form method="post" action="/barang/${b.id}/padam" data-confirm="Padam rekod barang ini?" class="pad"><button class="linklike danger">Padam</button></form>` : ''}
+${actionBar(back, 'Simpan', 'f')}`;
+  return layout('Barang', body, { active: 'senarai', cls: 'formpage' });
+}
+
 // ---------------- Data ----------------
 export function dataPage(result = null) {
   const body = `${ph({ title: 'Data', sub: 'Import senarai, eksport dan sandaran' })}
 <div class="pad stack narrow-col">
 <section class="panel form">
 <h2>Import CSV</h2>
-<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…). Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
-${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, <b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…), serta <code>vacuum_model, vacuum_unit, vacuum_tarikh_beli, vacuum_penggunaan, vacuum_filter_terakhir, vacuum_catatan, karpet_jenis, karpet_kp, karpet_tarikh_pasang, karpet_waranti_hingga</code>. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
+${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, ${result.dikemas ? `<b>${result.dikemas}</b> rekod sedia ada ditambah maklumat, ` : ''}<b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
 <form method="post" action="/import" enctype="multipart/form-data">
 <label class="file-btn">Pilih fail CSV<input type="file" name="fail" accept=".csv,text/csv" required></label>
+<label class="check"><input type="checkbox" name="kemas" value="1"> Jika nama sudah wujud: tambah PIC dan barang baharu ke rekod itu (status dan catatan tidak diubah)</label>
 <div id="fail-nama" class="small muted"></div>
 <button class="btn block">Import</button></form>
 </section>
@@ -447,7 +503,8 @@ ${WA_TUJUAN.map((k) => [k, TUJUAN[k]]).map(([k, v]) => `<label>${esc(v)}<textare
 </section>
 <section class="panel form"><h2>Peringatan di Hari ini</h2>
 <div class="grid-2"><label>Anggaran hayat karpet (tahun)<input type="number" name="hayat_karpet" min="1" max="50" value="${esc(s.hayat_karpet)}"></label>
-<label>Ingatkan cucian berkala (hari lebih awal)<input type="number" name="cuci_awal_hari" min="0" max="120" value="${esc(s.cuci_awal_hari)}"></label></div>
+<label>Ingatkan cucian berkala dan filter (hari lebih awal)<input type="number" name="cuci_awal_hari" min="0" max="120" value="${esc(s.cuci_awal_hari)}"></label>
+<label>1 pek filter beg tahan (bulan)<input type="number" name="selang_filter_bulan" min="1" max="36" value="${esc(s.selang_filter_bulan)}"></label></div>
 </section>
 <section class="panel form"><h2>Nama status</h2>
 ${STATUS.map((st, i) => `<label>${i + 1}. asal: ${esc(st)}<input name="status_${i}" value="${esc(s['status_' + i])}" maxlength="40"></label>`).join('')}
