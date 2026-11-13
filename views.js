@@ -475,7 +475,7 @@ export function dataPage(result = null) {
 ${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, ${result.dikemas ? `<b>${result.dikemas}</b> rekod sedia ada ditambah maklumat, ` : ''}<b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
 <form method="post" action="/import" enctype="multipart/form-data">
 <label class="file-btn">Pilih fail CSV<input type="file" name="fail" accept=".csv,text/csv" required></label>
-<label class="check"><input type="checkbox" name="kemas" value="1"> Jika nama sudah wujud: tambah PIC dan barang baharu ke rekod itu (status dan catatan tidak diubah; tarikh susulan diisi jika kosong)</label>
+<label class="check"><input type="checkbox" name="kemas" value="1"> Jika nama sudah wujud: tambah PIC dan barang baharu ke rekod itu (status dan catatan tidak diubah; negeri, daerah, alamat, telefon dan tarikh susulan diisi jika kosong sahaja)</label>
 <div id="fail-nama" class="small muted"></div>
 <button class="btn block">Import</button></form>
 </section>

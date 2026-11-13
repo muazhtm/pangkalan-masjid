@@ -1,7 +1,7 @@
 // Negeri dan daerah rasmi. Daerah hanya dari senarai tetap supaya tapisan konsisten.
 // Selangor: 9 daerah ikut JAIS e-masjid. W.P. Kuala Lumpur guna Zon JAWI (bukan daerah). Putrajaya tiada.
-// Bilangan zon JAWI: SEMENTARA, sahkan dengan senarai Zon di direktori masjid JAWI.
-export const ZON_KL = 10;
+// Zon JAWI: Zon 1 hingga Zon 6 (direktori masjid JAWI, disahkan 13 Nov 2026). "Zon Putrajaya" = negeri W.P. Putrajaya.
+export const ZON_KL = 6;
 export const NEGERI = [
   'Selangor', 'W.P. Kuala Lumpur', 'W.P. Putrajaya', 'Negeri Sembilan',
   'Johor', 'Kedah', 'Kelantan', 'Melaka', 'Pahang', 'Perak', 'Perlis', 'Pulau Pinang', 'Sabah', 'Sarawak', 'Terengganu', 'W.P. Labuan',
@@ -16,7 +16,7 @@ const kunci = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const ALIAS_NEGERI = new Map([
   ...NEGERI.map((n) => [kunci(n), n]),
   ['kl', 'W.P. Kuala Lumpur'], ['kualalumpur', 'W.P. Kuala Lumpur'], ['wpkl', 'W.P. Kuala Lumpur'], ['wilayahpersekutuankualalumpur', 'W.P. Kuala Lumpur'],
-  ['putrajaya', 'W.P. Putrajaya'], ['wilayahpersekutuanputrajaya', 'W.P. Putrajaya'],
+  ['putrajaya', 'W.P. Putrajaya'], ['zonputrajaya', 'W.P. Putrajaya'], ['wilayahpersekutuanputrajaya', 'W.P. Putrajaya'],
   ['labuan', 'W.P. Labuan'], ['n9', 'Negeri Sembilan'], ['ns', 'Negeri Sembilan'], ['penang', 'Pulau Pinang'], ['ppinang', 'Pulau Pinang'],
 ]);
 const ALIAS_DAERAH = new Map();

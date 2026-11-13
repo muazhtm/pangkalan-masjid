@@ -678,6 +678,8 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   };
   const ins = db.prepare('INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
   const isiLokasi = db.prepare("UPDATE tempat SET negeri = ?, daerah = ?, dikemas = datetime('now') WHERE id = ?");
+  const isiAlamat = db.prepare("UPDATE tempat SET alamat = ?, dikemas = datetime('now') WHERE id = ? AND coalesce(trim(alamat), '') = ''");
+  const isiTelefon = db.prepare("UPDATE tempat SET telefon = ?, dikemas = datetime('now') WHERE id = ? AND coalesce(trim(telefon), '') = ''");
   const isiSusulan = db.prepare("UPDATE tempat SET follow_up = ?, dikemas = datetime('now') WHERE id = ? AND follow_up IS NULL");
   const insPic = db.prepare('INSERT INTO pic (tempat_id,nama,jawatan,telefon) VALUES (?,?,?,?)');
   tx(() => {
@@ -695,6 +697,10 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
         if (m.length === 1) {
           const fu = dateOrNull(get(r, 'follow_up'));
           if (fu) isiSusulan.run(fu, m[0].id);
+          const alamatBaru = [get(r, 'alamat'), bandar].filter(Boolean).join(', ') || null;
+          if (alamatBaru) isiAlamat.run(alamatBaru, m[0].id);
+          const telBaru = get(r, 'telefon', 40);
+          if (telBaru) isiTelefon.run(telBaru, m[0].id);
           const t = db.prepare('SELECT negeri, daerah FROM tempat WHERE id = ?').get(m[0].id);
           if (L.negeri && !t.negeri) isiLokasi.run(L.negeri, L.daerah, m[0].id);
           else if (L.daerah && t.negeri === L.negeri && !t.daerah) isiLokasi.run(t.negeri, L.daerah, m[0].id);

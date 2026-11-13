@@ -353,6 +353,14 @@ await ok('import: negeri dalam lajur daerah dipindah, bandar ke alamat', async (
   const h2 = await (await req('/import', { method: 'POST', body: fd2 })).text();
   assert.ok((await det('Imp Zon')).includes('Zon 3, W.P. Kuala Lumpur'));
   assert.ok(h2.includes('Zon 3 bukan dalam Selangor'));
+  const fd3 = new FormData(); fd3.set('kemas', '1'); fd3.append('fail', new Blob(['nama,negeri,daerah,alamat,telefon\nMasjid Imp Zon,,,Jln Rasmi 1,03-1111 0000\nMasjid Imp Bandar,,,Jln Lain,03-2222 0000\nMasjid Imp Putrajaya,,Zon Putrajaya,,\n']), 'x.csv');
+  await req('/import', { method: 'POST', body: fd3 });
+  const z = await det('Imp Zon');
+  assert.ok(z.includes('Jln Rasmi 1') && z.includes('03-1111 0000'), 'alamat & telefon kosong diisi');
+  const bd = await det('Imp Bandar');
+  assert.ok(bd.includes('Jln 1, Shah Alam') && !bd.includes('Jln Lain'), 'alamat sedia ada tidak ditimpa');
+  assert.ok((await det('Imp Putrajaya')).includes('W.P. Putrajaya'));
+  assert.ok(!(await (await req('/tempat/baru')).text()).includes('Zon 7'));
 });
 await ok('migrasi v5 betulkan rekod lama', async () => {
   const { execFileSync } = await import('node:child_process');
