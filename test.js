@@ -432,7 +432,7 @@ await ok('skor: pelanggan sampai masa + keluasan + vacuum, sebab dipaparkan', as
   const det = await (await req(`/tempat/${sid}`)).text();
   // 35 cucian sampai masa + 10 keluasan (10,400 kp) + 5 vacuum = 50
   assert.ok(det.includes('<span class="skor">50</span>'), 'skor 50');
-  assert.ok(det.includes('Cucian sampai masa') && det.includes('Keluasan 10,400 kp') && det.includes('Beli vacuum 1 kali'));
+  assert.ok(det.includes('Cucian sampai masa') && det.includes('Keluasan 10,400 kp') && det.includes('Rekod beli vacuum: 1'));
   assert.ok(det.includes('Sejarah cucian') && det.includes('<b>1</b> kali dicuci'));
   const home = (await (await req('/')).text()).split('Keutamaan follow-up</h2>')[1];
   assert.ok(home.includes('Masjid Skor Uji') && home.includes('Kadar tukar'));
@@ -455,6 +455,22 @@ await ok('sejarah cucian: tambah, kira, padam selaras cucian terakhir', async ()
   const csv = await (await req('/eksport.csv')).text();
   const baris = csv.split('\n').find((l) => l.includes('Surau Sejarah Cuci'));
   assert.ok(baris.includes(d1) && !baris.includes(d2), 'terakhir_cuci kembali ke d1');
+});
+await ok('borang: betulkan tarikh cucian terakhir (turun), naik = cucian baharu, kosong = buang', async () => {
+  const base = { jenis: 'Surau', nama: 'Surau Betul Tarikh', status: 'Pelanggan', kitaran_cuci_bulan: '6' };
+  const r = await req('/tempat', form({ ...base, terakhir_cuci: '2026-10-30' }));
+  const sid = idFrom(r.headers.get('location'));
+  const baris = async () => (await (await req('/eksport.csv')).text()).split('\n').find((l) => l.includes('Surau Betul Tarikh'));
+  await req(`/tempat/${sid}`, form({ ...base, terakhir_cuci: '2026-03-10' })); // salah taip dibetulkan
+  let det = await (await req(`/tempat/${sid}`)).text();
+  assert.ok(det.includes('<b>1</b> kali dicuci') && !det.includes('2026-10-30'), 'baris lama diubah, bukan ditambah');
+  assert.ok((await baris()).includes('2026-03-10'));
+  await req(`/tempat/${sid}`, form({ ...base, terakhir_cuci: '2026-09-01' })); // cucian baharu
+  det = await (await req(`/tempat/${sid}`)).text();
+  assert.ok(det.includes('<b>2</b> kali dicuci'));
+  await req(`/tempat/${sid}`, form({ ...base, terakhir_cuci: '' })); // kosongkan = buang terkini
+  det = await (await req(`/tempat/${sid}`)).text();
+  assert.ok(det.includes('<b>1</b> kali dicuci') && (await baris()).includes('2026-03-10'));
 });
 await ok('import: keluasan dari catatan, cucian terakhir masuk sejarah, kemas isi kosong sahaja', async () => {
   const csv = 'nama,jenis,catatan,terakhir_cuci,status\nMasjid Import Luas,Masjid,"Keluasan (senarai 2024): 14,320 kp; Got response",2025-03-01,Pelanggan\n';

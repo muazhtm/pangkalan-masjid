@@ -74,12 +74,11 @@ export function kiraSkor(id = null) {
     const akhirCuci = [cu?.akhir, t.terakhir_cuci].filter(Boolean).sort().pop() || null;
     const vac = vacuum.get(t.id)?.n || 0;
     const bekas = akhirCuci && akhirCuci < sempadanBekas;
-    if (bekas) tambah(MARKAH.bekasPelanggan, `Bekas pelanggan cucian (terakhir ${akhirCuci})`);
-    else if (t.status === 'Pelanggan') {
-      const due = t.kitaran_cuci_bulan > 0 && akhirCuci ? addMonths(akhirCuci, t.kitaran_cuci_bulan) : null;
-      if (due && due <= awal) tambah(MARKAH.cuciSampaiMasa, `Cucian sampai masa (${due})`);
-      else tambah(MARKAH.pelangganAktif, 'Pelanggan aktif');
-    }
+    const due = t.status === 'Pelanggan' && t.kitaran_cuci_bulan > 0 && akhirCuci ? addMonths(akhirCuci, t.kitaran_cuci_bulan) : null;
+    // Ambil yang tertinggi: sampai masa (35) > bekas pelanggan (25) > pelanggan aktif (15)
+    if (due && due <= awal) tambah(MARKAH.cuciSampaiMasa, `Cucian sampai masa (${due})`);
+    else if (bekas) tambah(MARKAH.bekasPelanggan, `Bekas pelanggan cucian (terakhir ${akhirCuci})`);
+    else if (t.status === 'Pelanggan') tambah(MARKAH.pelangganAktif, 'Pelanggan aktif');
     const adaHubungan = t.status === 'Pelanggan' || !!akhirCuci || vac > 0;
     if (isyaratKarpet && adaHubungan) tambah(MARKAH.karpetDanHubungan, 'Isyarat karpet + hubungan sedia ada');
     // --- Keluasan ---
@@ -87,7 +86,7 @@ export function kiraSkor(id = null) {
     const mk = Math.min(MARKAH.keluasanMaks, Math.floor(kp / 5000) * MARKAH.keluasanSetiap5000);
     if (mk > 0) tambah(mk, `Keluasan ${Math.round(kp).toLocaleString('en-US')} kp`);
     // --- Vacuum ---
-    if (vac) tambah(Math.min(MARKAH.vacuumMaks, vac * MARKAH.vacuumSetiap), `Beli vacuum ${vac} kali`);
+    if (vac) tambah(Math.min(MARKAH.vacuumMaks, vac * MARKAH.vacuumSetiap), `Rekod beli vacuum: ${vac}`);
     if (filter.get(t.id)) tambah(MARKAH.filterSampaiMasa, 'Filter beg vacuum sampai masa');
     // --- Tolak ---
     const hb = hubungi.get(t.id)?.akhir;

@@ -209,6 +209,22 @@ function catatCucian(tempatId, tarikh, catatan = null) {
   }
   selarasCuci(tempatId);
 }
+// Medan "Cucian terakhir" di borang = baris cucian terkini.
+// Tarikh lebih lewat = cucian baharu (tambah baris). Tarikh lebih awal = pembetulan (ubah baris terkini).
+// Dikosongkan = buang baris terkini.
+function betulkanCuciBorang(tempatId, lama, baru) {
+  const terkini = lama && db.prepare('SELECT id FROM cucian WHERE tempat_id = ? AND tarikh = ? ORDER BY id DESC LIMIT 1').get(tempatId, lama);
+  if (!baru) {
+    if (terkini) db.prepare('DELETE FROM cucian WHERE id = ?').run(terkini.id);
+  } else if (!terkini || baru > lama) {
+    return catatCucian(tempatId, baru);
+  } else if (db.prepare('SELECT 1 FROM cucian WHERE tempat_id = ? AND tarikh = ?').get(tempatId, baru)) {
+    db.prepare('DELETE FROM cucian WHERE id = ?').run(terkini.id);
+  } else {
+    db.prepare('UPDATE cucian SET tarikh = ? WHERE id = ?').run(baru, terkini.id);
+  }
+  selarasCuci(tempatId);
+}
 function selarasCuci(tempatId) {
   const akhir = db.prepare('SELECT MAX(tarikh) m FROM cucian WHERE tempat_id = ?').get(tempatId).m;
   db.prepare(`UPDATE tempat SET terakhir_cuci = ?, dikemas = datetime('now') WHERE id = ?`).run(akhir, tempatId);
@@ -293,8 +309,7 @@ app.post('/tempat/:id', (req, res) => {
   tx(() => {
     db.prepare(`UPDATE tempat SET jenis=?,nama=?,negeri=?,daerah=?,alamat=?,telefon=?,status=?,produk=?,kitaran_cuci_bulan=?,terakhir_cuci=?,follow_up=?,catatan=?,keluasan_kp=?,dikemas=datetime('now') WHERE id=?`)
       .run(d.jenis, d.nama, d.negeri, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan, d.keluasan_kp, t.id);
-    // Tarikh cucian terakhir yang ditaip di borang masuk ke sejarah (jika tarikh baharu)
-    if (d.terakhir_cuci && d.terakhir_cuci !== t.terakhir_cuci) catatCucian(t.id, d.terakhir_cuci);
+    if (d.terakhir_cuci !== t.terakhir_cuci) betulkanCuciBorang(t.id, t.terakhir_cuci, d.terakhir_cuci);
   });
   res.redirect(303, `/tempat/${t.id}`);
 });
