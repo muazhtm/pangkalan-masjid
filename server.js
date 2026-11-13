@@ -535,25 +535,38 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   if (rows.length < 2) return res.status(400).send(V.messagePage('Fail kosong', 'Perlu tajuk lajur dan sekurang-kurangnya satu baris.'));
   const head = rows[0].map((h) => h.trim().toLowerCase());
   const col = (name) => head.indexOf(name);
-  const c = Object.fromEntries(['nama', 'jenis', 'daerah', 'alamat', 'telefon', 'pic', 'jawatan_pic', 'telefon_pic'].map((n) => [n, col(n)]));
+  const PIC_N = ['', ...Array.from({ length: 9 }, (_, i) => String(i + 2))]; // pic, pic2..pic10
+  const names = ['nama', 'jenis', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci'];
+  for (const n of PIC_N) names.push('pic' + n, 'jawatan_pic' + n, 'telefon_pic' + n);
+  const c = Object.fromEntries(names.map((n) => [n, col(n)]));
   if (c.nama < 0) return res.status(400).send(V.messagePage('Lajur "nama" tiada', 'Baris pertama mesti ada lajur bernama nama.'));
-  const get = (r, k) => (c[k] >= 0 ? txt(r[c[k]]) : null);
+  const get = (r, k, max) => (c[k] >= 0 ? txt(r[c[k]], max) : null);
+  // status: nilai asal atau nama paparan (Tetapan), tidak peka huruf
+  const statusMap = new Map();
+  for (const s of STATUS) { statusMap.set(s.toLowerCase(), s); statusMap.set(labelStatus(s).toLowerCase(), s); }
 
   const out = { tambah: 0, langkau: 0, amaran: [] };
   const exists = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?) AND lower(coalesce(daerah, \'\')) = lower(?)');
-  const ins = db.prepare('INSERT INTO tempat (jenis,nama,daerah,alamat,telefon) VALUES (?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO tempat (jenis,nama,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci) VALUES (?,?,?,?,?,?,?,?,?)');
   const insPic = db.prepare('INSERT INTO pic (tempat_id,nama,jawatan,telefon) VALUES (?,?,?,?)');
   tx(() => {
     rows.slice(1).forEach((r, i) => {
-      const nama = get(r, 'nama');
+      const nama = get(r, 'nama', 200);
       if (!nama) { out.langkau++; out.amaran.push(`Baris ${i + 2}: tiada nama`); return; }
-      const daerah = get(r, 'daerah');
+      const daerah = get(r, 'daerah', 100);
       if (exists.get(nama, daerah || '')) { out.langkau++; return; }
       const jenisRaw = (get(r, 'jenis') || nama).toLowerCase();
       const jenis = /surau/.test(jenisRaw) ? 'Surau' : 'Masjid';
-      const id = ins.run(jenis, nama, daerah, get(r, 'alamat'), get(r, 'telefon')).lastInsertRowid;
-      const pn = get(r, 'pic'), pt = get(r, 'telefon_pic');
-      if (pn || pt) insPic.run(id, pn, get(r, 'jawatan_pic'), pt);
+      const stRaw = get(r, 'status');
+      const status = stRaw ? statusMap.get(stRaw.toLowerCase()) : 'Belum dihubungi';
+      if (!status) out.amaran.push(`Baris ${i + 2}: status "${stRaw}" tidak dikenali, guna Belum dihubungi`);
+      let kitaran = intOrNull(get(r, 'kitaran_cuci_bulan'));
+      if (kitaran !== null && (kitaran < 1 || kitaran > 60)) kitaran = null;
+      const id = ins.run(jenis, nama, daerah, get(r, 'alamat'), get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci'))).lastInsertRowid;
+      for (const n of PIC_N) {
+        const pn = get(r, 'pic' + n, 100), pt = get(r, 'telefon_pic' + n, 40);
+        if (pn || pt) insPic.run(id, pn, get(r, 'jawatan_pic' + n, 100), pt);
+      }
       out.tambah++;
     });
   });

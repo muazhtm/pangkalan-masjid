@@ -413,7 +413,7 @@ export function dataPage(result = null) {
 <div class="pad stack narrow-col">
 <section class="panel form">
 <h2>Import CSV</h2>
-<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, daerah, alamat, telefon, pic, jawatan_pic, telefon_pic</code>. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
+<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…). Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
 ${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, <b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
 <form method="post" action="/import" enctype="multipart/form-data">
 <label class="file-btn">Pilih fail CSV<input type="file" name="fail" accept=".csv,text/csv" required></label>
