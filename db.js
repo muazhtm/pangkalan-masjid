@@ -116,6 +116,8 @@ const migrations = [
     // Ukuran lama dalam meter -> kaki (1 m = 3.28084 kaki)
     db.exec(`UPDATE ukuran SET panjang = round(panjang * 3.28084, 2), lebar = round(lebar * 3.28084, 2)`);
   },
+  // v2 -> v3: perkhidmatan bagi setiap dokumen (Karpet baharu / Cuci karpet / Vacuum / Lain-lain)
+  () => db.exec('ALTER TABLE dokumen ADD COLUMN perkhidmatan TEXT'),
 ];
 
 const ver = db.prepare('PRAGMA user_version').get().user_version;

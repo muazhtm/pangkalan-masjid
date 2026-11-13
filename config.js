@@ -14,7 +14,10 @@ export const TUJUAN = {
   karpet: 'Karpet baharu',
   cuci: 'Cuci karpet',
   vacuum: 'Vacuum',
+  lain: 'Lain-lain', // renovation tandas, tinted cermin, baik-pulih karpet dan kerja lain yang jarang
 };
+// Tujuan yang ada mesej WhatsApp siap (Lain-lain tiada)
+export const WA_TUJUAN = ['karpet', 'cuci', 'vacuum'];
 
 export const SYARIKAT = 'Al Haromain Carpets & Services';
 
@@ -54,7 +57,7 @@ export function labelStatus(s) {
 }
 
 export function waMesej(tujuan, tempatNama, picNama) {
-  if (!(tujuan in TUJUAN)) return null;
+  if (!WA_TUJUAN.includes(tujuan)) return null;
   return tetapan(`wa_${tujuan}`)
     .replaceAll('[PIC]', picNama || 'tuan/puan')
     .replaceAll('[penghantar]', tetapan('penghantar'))

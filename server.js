@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db, tx, ROOT, DATA_DIR, UPLOAD_DIR, today, nowKL, addMonths, addDays } from './db.js';
 import {
-  JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, STATUS_PIC, JENIS_DOK, LALAI,
+  JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, LALAI,
   hayatKarpet, cuciAwalHari, waMesej, labelStatus, semuaTetapan, simpanTetapan,
 } from './config.js';
 import { txt, intOrNull, posId, dateOrNull, arr, waNumber, parseCsv, csvCell, likeEscape, senOrNull, fmtRM } from './util.js';
@@ -344,7 +344,7 @@ app.post('/tempat/:id/wa', (req, res) => {
   const t = loadTempat(req, res);
   if (!t) return;
   const kunci = String(req.body.tujuan || '');
-  if (!(kunci in TUJUAN)) return res.status(400).send(V.messagePage('Tidak sah', 'Tujuan tidak sah.'));
+  if (!WA_TUJUAN.includes(kunci)) return res.status(400).send(V.messagePage('Tidak sah', 'Tujuan tidak sah.'));
 
   let pic = null;
   const picId = posId(req.body.pic);
@@ -425,6 +425,7 @@ function parseDok(b) {
     tarikh: dateOrNull(b.tarikh),
     amaun_sen: senOrNull(b.amaun),
     catatan: txt(b.catatan, 1000),
+    perkhidmatan: Object.values(TUJUAN).includes(b.perkhidmatan) ? b.perkhidmatan : null,
   };
   let error = '';
   if (!d.jenis) error = 'Pilih jenis dokumen.';
@@ -457,9 +458,9 @@ app.post('/tempat/:id/dokumen', uploadDok.single('fail'), (req, res) => {
   const status = STATUS.includes(req.body.status) ? req.body.status : null;
   try {
     tx(() => {
-      db.prepare('INSERT INTO dokumen (tempat_id,jenis,nombor,tarikh,amaun_sen,fail,fail_nama,catatan) VALUES (?,?,?,?,?,?,?,?)')
-        .run(t.id, d.jenis, d.nombor, d.tarikh, d.amaun_sen, file?.filename ?? null, file ? txt(file.originalname, 150) : null, d.catatan);
-      const ring = `${d.jenis} ${d.nombor} dihantar (${d.tarikh})${d.amaun_sen !== null ? ' · RM ' + fmtRM(d.amaun_sen) : ''}${d.catatan ? ' · ' + d.catatan : ''}`;
+      db.prepare('INSERT INTO dokumen (tempat_id,jenis,nombor,tarikh,amaun_sen,fail,fail_nama,catatan,perkhidmatan) VALUES (?,?,?,?,?,?,?,?,?)')
+        .run(t.id, d.jenis, d.nombor, d.tarikh, d.amaun_sen, file?.filename ?? null, file ? txt(file.originalname, 150) : null, d.catatan, d.perkhidmatan);
+      const ring = `${d.jenis} ${d.nombor}${d.perkhidmatan ? ' (' + d.perkhidmatan + ')' : ''} dihantar (${d.tarikh})${d.amaun_sen !== null ? ' · RM ' + fmtRM(d.amaun_sen) : ''}${d.catatan ? ' · ' + d.catatan : ''}`;
       db.prepare('INSERT INTO log (tempat_id,waktu,saluran,ringkasan) VALUES (?,?,?,?)').run(t.id, nowKL(), 'Dokumen', ring);
       if (status && status !== t.status) db.prepare(`UPDATE tempat SET status=?, dikemas=datetime('now') WHERE id=?`).run(status, t.id);
       if (req.body.kemas_cuci === '1' && d.jenis !== 'Quotation') db.prepare(`UPDATE tempat SET terakhir_cuci=?, dikemas=datetime('now') WHERE id=?`).run(d.tarikh, t.id);
@@ -488,8 +489,8 @@ app.post('/dokumen/:id', uploadDok.single('fail'), (req, res) => {
   const failBaru = ganti ? file.filename : buang ? null : r.k.fail;
   const namaBaru = ganti ? txt(file.originalname, 150) : buang ? null : r.k.fail_nama;
   tx(() => {
-    db.prepare('UPDATE dokumen SET jenis=?,nombor=?,tarikh=?,amaun_sen=?,fail=?,fail_nama=?,catatan=? WHERE id=?')
-      .run(d.jenis, d.nombor, d.tarikh, d.amaun_sen, failBaru, namaBaru, d.catatan, r.k.id);
+    db.prepare('UPDATE dokumen SET jenis=?,nombor=?,tarikh=?,amaun_sen=?,fail=?,fail_nama=?,catatan=?,perkhidmatan=? WHERE id=?')
+      .run(d.jenis, d.nombor, d.tarikh, d.amaun_sen, failBaru, namaBaru, d.catatan, d.perkhidmatan, r.k.id);
     db.prepare('INSERT INTO log (tempat_id,waktu,saluran,ringkasan) VALUES (?,?,?,?)')
       .run(r.t.id, nowKL(), 'Dokumen', `${d.jenis} ${d.nombor} dikemas kini${ganti ? ' (lampiran diganti)' : buang ? ' (lampiran dibuang)' : ''}`);
     const status = STATUS.includes(req.body.status) ? req.body.status : null;

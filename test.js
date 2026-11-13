@@ -229,6 +229,14 @@ await ok('edit dokumen: ganti lampiran buang fail lama', async () => {
   assert.notDeepEqual(after, before);
   assert.ok((await (await req(`/tempat/${id}`)).text()).includes('RM 1,400.00'));
 });
+await ok('perkhidmatan Lain-lain: dokumen ya, butang WA tidak', async () => {
+  const fd = new FormData(); fd.set('jenis', 'Quotation'); fd.set('nombor', 'Q-TANDAS-1'); fd.set('tarikh', dateOffset(0)); fd.set('perkhidmatan', 'Lain-lain'); fd.set('catatan', 'Renovation tandas');
+  assert.equal((await req(`/tempat/${id}/dokumen`, { method: 'POST', body: fd })).status, 303);
+  const det = await (await req(`/tempat/${id}`)).text();
+  assert.ok(det.includes('Q-TANDAS-1 (Lain-lain) dihantar'));
+  assert.ok(!/name="tujuan" value="lain"/.test(det), 'tiada butang WA Lain-lain');
+  assert.equal((await req(`/tempat/${id}/wa`, form({ pic: '', tujuan: 'lain' }))).status, 400);
+});
 await ok('dokumen perlu sesi', async () => { assert.equal((await fetch(`${base}/dokumen/${dokId}/fail`, { redirect: 'manual' })).status, 303); });
 
 console.log('Tetapan');

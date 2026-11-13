@@ -1,5 +1,5 @@
 import { esc, waNumber, fmtRM } from './util.js';
-import { JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, STATUS_PIC, JENIS_DOK, labelStatus } from './config.js';
+import { JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, labelStatus } from './config.js';
 
 let currentUser = null;
 export const setUser = (u) => { currentUser = u; };
@@ -208,7 +208,7 @@ ${actionBar(back, 'Simpan', 'f')}`;
 
 // ---------------- Butiran ----------------
 function waRow(t, picId) {
-  return `<div class="wa-grid">${Object.entries(TUJUAN).map(([k, v]) => `<form method="post" action="/tempat/${t.id}/wa" target="_blank"><input type="hidden" name="pic" value="${picId}"><input type="hidden" name="tujuan" value="${k}"><button class="btn wa">${esc(v)}</button></form>`).join('')}</div>`;
+  return `<div class="wa-grid">${WA_TUJUAN.map((k) => [k, TUJUAN[k]]).map(([k, v]) => `<form method="post" action="/tempat/${t.id}/wa" target="_blank"><input type="hidden" name="pic" value="${picId}"><input type="hidden" name="tujuan" value="${k}"><button class="btn wa">${esc(v)}</button></form>`).join('')}</div>`;
 }
 
 function picCard(t, p) {
@@ -226,7 +226,7 @@ function picCard(t, p) {
 function dokRow(k) {
   const cls = k.jenis === 'Quotation' ? 'dk-q' : k.jenis === 'Invois' ? 'dk-i' : 'dk-l';
   const meta = [`Dihantar ${tarikhMy(k.tarikh)}`, k.amaun_sen !== null ? `RM ${fmtRM(k.amaun_sen)}` : '', k.fail ? (k.fail.endsWith('.pdf') ? 'PDF' : 'Gambar') : 'tiada lampiran'].filter(Boolean).join(' · ');
-  return `<div class="dok"><span class="dok-ic ${cls}">${icon('fail', 20)}</span><div class="grow"><div class="dok-t">${esc(k.jenis)} · ${esc(k.nombor)}</div><div class="muted small">${meta}</div>${k.catatan ? `<div class="small">${esc(k.catatan)}</div>` : ''}</div>
+  return `<div class="dok"><span class="dok-ic ${cls}">${icon('fail', 20)}</span><div class="grow"><div class="dok-t">${esc(k.jenis)} · ${esc(k.nombor)}</div>${k.perkhidmatan ? `<div class="small">${esc(k.perkhidmatan)}</div>` : ''}<div class="muted small">${meta}</div>${k.catatan ? `<div class="small">${esc(k.catatan)}</div>` : ''}</div>
 <div class="dok-a">${k.fail ? `<a href="/dokumen/${k.id}/fail" target="_blank" rel="noopener">Buka</a>` : ''}<a href="/dokumen/${k.id}/edit">Edit</a></div></div>`;
 }
 
@@ -389,6 +389,7 @@ export function dokumenFormPage(t, k, error = '', cadang) {
 <form id="f" method="post" action="${k.id ? `/dokumen/${k.id}` : `/tempat/${t.id}/dokumen`}" enctype="multipart/form-data" class="form pad" data-dok data-status="${esc(t.status)}">
 ${errBox(error)}
 <fieldset><legend>Jenis dokumen</legend><div class="seg seg-3">${JENIS_DOK.map((j) => `<label><input type="radio" name="jenis" value="${esc(j)}"${jenis === j ? ' checked' : ''} data-cadang="${esc(cadang(j, t.status))}"><span>${esc(j)}</span></label>`).join('')}</div></fieldset>
+<label>Perkhidmatan<select name="perkhidmatan">${opt(Object.values(TUJUAN), k.perkhidmatan, '(tidak dinyatakan)')}</select></label>
 <label>Nombor dokumen <b class="req">*</b><input name="nombor" value="${esc(k.nombor)}" required maxlength="60" placeholder="cth: AHCS/QT/2026/0047"></label>
 <div class="grid-2">
 <label>Tarikh dihantar<input type="date" name="tarikh" value="${esc(k.tarikh)}" required></label>
@@ -399,7 +400,7 @@ ${k.fail ? `<div class="file-cur">${icon('fail', 20)}<span class="grow ell">${es
 <div id="fail-nama" class="small muted"></div></div>
 <label>Tukar status kepada<select name="status" id="dok-status">${optStatus(sug, `(kekal ${labelStatus(t.status)})`)}</select></label>
 <label class="check" id="kemas-cuci"><input type="checkbox" name="kemas_cuci" value="1"> Kemas kini "cucian terakhir" ke tarikh ini (untuk invois / laporan kerja cucian)</label>
-<label>Catatan<textarea name="catatan" rows="2" maxlength="1000" placeholder="cth: Hantar kepada Ustaz Ahmad melalui WhatsApp.">${esc(k.catatan)}</textarea></label>
+<label>Catatan<textarea name="catatan" rows="2" maxlength="1000" placeholder="cth: Renovation tandas lelaki. Hantar kepada Ustaz Ahmad melalui WhatsApp.">${esc(k.catatan)}</textarea></label>
 <p class="muted small">Disimpan juga dalam log hubungan.</p>
 </form>
 ${k.id ? `<form method="post" action="/dokumen/${k.id}/padam" data-confirm="Padam rekod dokumen ini beserta lampirannya?" class="pad"><button class="linklike danger">Padam dokumen ini</button></form>` : ''}
@@ -441,7 +442,7 @@ ${ok ? `<p class="ok-box">${esc(ok)}</p>` : ''}${errBox(error)}
 <form method="post" action="/tetapan" class="stack" id="tf">
 <section class="panel form"><h2>Mesej WhatsApp</h2>
 <label>Nama penghantar dalam mesej<input name="penghantar" value="${esc(s.penghantar)}" maxlength="60"></label>
-${Object.entries(TUJUAN).map(([k, v]) => `<label>${esc(v)}<textarea name="wa_${k}" rows="5" maxlength="1500" data-preview>${esc(s['wa_' + k])}</textarea></label><div class="preview small" aria-live="polite"></div>`).join('')}
+${WA_TUJUAN.map((k) => [k, TUJUAN[k]]).map(([k, v]) => `<label>${esc(v)}<textarea name="wa_${k}" rows="5" maxlength="1500" data-preview>${esc(s['wa_' + k])}</textarea></label><div class="preview small" aria-live="polite"></div>`).join('')}
 <p class="muted small">[PIC], [penghantar] dan [masjid] diganti automatik. Jika PIC tiada nama, [PIC] jadi "tuan/puan". Kosongkan kotak untuk kembali ke teks asal.</p>
 </section>
 <section class="panel form"><h2>Peringatan di Hari ini</h2>
