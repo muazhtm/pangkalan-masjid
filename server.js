@@ -678,7 +678,9 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   };
   const ins = db.prepare('INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
   const isiLokasi = db.prepare("UPDATE tempat SET negeri = ?, daerah = ?, dikemas = datetime('now') WHERE id = ?");
-  const isiAlamat = db.prepare("UPDATE tempat SET alamat = ?, dikemas = datetime('now') WHERE id = ? AND coalesce(trim(alamat), '') = ''");
+  // Isi alamat jika kosong, atau ganti jika alamat baru mengandungi alamat lama (cth "Banting" -> alamat penuh JAIS)
+  const isiAlamat = db.prepare(`UPDATE tempat SET alamat = ?1, dikemas = datetime('now') WHERE id = ?2
+    AND (coalesce(trim(alamat), '') = '' OR (length(?1) > length(alamat) AND instr(lower(?1), lower(trim(alamat))) > 0))`);
   const isiTelefon = db.prepare("UPDATE tempat SET telefon = ?, dikemas = datetime('now') WHERE id = ? AND coalesce(trim(telefon), '') = ''");
   const isiSusulan = db.prepare("UPDATE tempat SET follow_up = ?, dikemas = datetime('now') WHERE id = ? AND follow_up IS NULL");
   const insPic = db.prepare('INSERT INTO pic (tempat_id,nama,jawatan,telefon) VALUES (?,?,?,?)');

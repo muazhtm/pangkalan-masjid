@@ -360,6 +360,12 @@ await ok('import: negeri dalam lajur daerah dipindah, bandar ke alamat', async (
   const bd = await det('Imp Bandar');
   assert.ok(bd.includes('Jln 1, Shah Alam') && !bd.includes('Jln Lain'), 'alamat sedia ada tidak ditimpa');
   assert.ok((await det('Imp Putrajaya')).includes('W.P. Putrajaya'));
+  const fd4 = new FormData(); fd4.append('fail', new Blob(['nama,negeri,daerah\nMasjid Imp Ganti,Selangor,Banting\n']), 'x.csv');
+  await req('/import', { method: 'POST', body: fd4 });
+  const fd5 = new FormData(); fd5.set('kemas', '1'); fd5.append('fail', new Blob(['nama,alamat\nMasjid Imp Ganti,"Jln Sultan Alam Shah, 42700 Banting"\nMasjid Imp Bandar,"Jln 9, Klang"\n']), 'x.csv');
+  await req('/import', { method: 'POST', body: fd5 });
+  assert.ok((await det('Imp Ganti')).includes('Jln Sultan Alam Shah, 42700 Banting'), 'alamat lebih lengkap mengganti');
+  assert.ok((await det('Imp Bandar')).includes('Jln 1, Shah Alam'), 'alamat lain tidak ditimpa');
   assert.ok(!(await (await req('/tempat/baru')).text()).includes('Zon 7'));
 });
 await ok('migrasi v5 betulkan rekod lama', async () => {
