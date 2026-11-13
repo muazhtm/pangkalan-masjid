@@ -640,19 +640,21 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const out = { tambah: 0, langkau: 0, dikemas: 0, amaran: [] };
   const exists = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?) AND lower(coalesce(daerah, \'\')) = lower(?)');
   const byName = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?)');
-  const picTels = db.prepare('SELECT telefon FROM pic WHERE tempat_id = ?');
+  const picTels = db.prepare('SELECT nama, telefon FROM pic WHERE tempat_id = ?');
   const digits = (v) => String(v || '').replace(/\D/g, '').replace(/^60/, '0');
   const insBarang = db.prepare('INSERT INTO barang (tempat_id,jenis,butiran,unit,keluasan_kp,tarikh,waranti_hingga,penggunaan,filter_terakhir,catatan) VALUES (?,?,?,?,?,?,?,?,?,?)');
   const adaBarang = db.prepare("SELECT 1 FROM barang WHERE tempat_id = ? AND jenis = ? AND lower(coalesce(butiran, '')) = lower(?)");
   const addExtras = (id, r) => {
-    const ada = new Set(picTels.all(id).map((p) => digits(p.telefon)).filter(Boolean));
+    const sedia = picTels.all(id);
+    const ada = new Set(sedia.map((p) => digits(p.telefon)).filter(Boolean));
+    const adaNama = new Set(sedia.filter((p) => !digits(p.telefon) && p.nama).map((p) => p.nama.toLowerCase()));
     let n = 0;
     for (const k of PIC_N) {
       const pn = get(r, 'pic' + k, 100), pt = get(r, 'telefon_pic' + k, 40);
       if (!pn && !pt) continue;
-      if (pt && ada.has(digits(pt))) continue;
+      if (pt ? ada.has(digits(pt)) : adaNama.has(pn.toLowerCase())) continue;
       insPic.run(id, pn, get(r, 'jawatan_pic' + k, 100), pt);
-      if (pt) ada.add(digits(pt));
+      if (pt) ada.add(digits(pt)); else adaNama.add(pn.toLowerCase());
       n++;
     }
     const vm = get(r, 'vacuum_model', 150), vu = intOrNull(get(r, 'vacuum_unit'));

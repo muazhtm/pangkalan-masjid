@@ -354,7 +354,7 @@ await ok('vacuum Tidak pasti: tiada peringatan; karpet guna tarikh pasang', asyn
   assert.equal((await req(`/tempat/${sid}/barang`, form({ jenis: 'Kerusi' }))).status, 400);
 });
 await ok('import kemas: tambah ke rekod sedia ada, tiada pendua', async () => {
-  const csv = 'nama,pic,jawatan_pic,telefon_pic,vacuum_model,vacuum_unit,vacuum_catatan\nmasjid vakum uji,Hj Baru,PIC vacuum,0171112222,SEBO,3,Senarai 2024\nMasjid Baru SEBO,,,,SEBO,1,\n';
+  const csv = 'nama,pic,jawatan_pic,telefon_pic,pic2,follow_up,vacuum_model,vacuum_unit,vacuum_catatan\nmasjid vakum uji,Hj Baru,PIC vacuum,0171112222,Siak Tanpa Nombor,2026-01-02,SEBO,3,Senarai 2024\nMasjid Baru SEBO,,,,,,SEBO,1,\n';
   const send = async () => { const fd = new FormData(); fd.set('kemas', '1'); fd.append('fail', new Blob([csv]), 'x.csv'); return (await req('/import', { method: 'POST', body: fd })).text(); };
   const html = await send();
   assert.match(html, /<b>1<\/b> rekod ditambah/);
@@ -363,6 +363,7 @@ await ok('import kemas: tambah ke rekod sedia ada, tiada pendua', async () => {
   const vid = list.match(/\/tempat\/(\d+)"/)[1];
   const det = await (await req(`/tempat/${vid}`)).text();
   assert.equal(det.split('Hj Baru').length - 1, 1, 'PIC tidak berganda');
+  assert.equal(det.split('Siak Tanpa Nombor').length - 1, 1, 'PIC tanpa nombor tidak berganda');
   assert.equal((det.match(/Senarai 2024/g) || []).length, 1, 'vacuum tidak berganda');
   assert.equal((await (await req('/tempat?q=Baru%20SEBO')).text()).split('Masjid Baru SEBO').length > 1, true);
 });
