@@ -349,6 +349,10 @@ await ok('import: negeri dalam lajur daerah dipindah, bandar ke alamat', async (
   const b = await det('Imp Bandar');
   assert.ok(b.includes('Jln 1, Shah Alam') && b.includes('· Selangor'));
   assert.ok((await det('Imp Sepang')).includes('Sepang, Selangor'));
+  const fd2 = new FormData(); fd2.append('fail', new Blob(['nama,negeri,daerah\nMasjid Imp Zon,Kuala Lumpur,ZON 3\nMasjid Imp Zon Salah,Selangor,Zon 3\n']), 'x.csv');
+  const h2 = await (await req('/import', { method: 'POST', body: fd2 })).text();
+  assert.ok((await det('Imp Zon')).includes('Zon 3, W.P. Kuala Lumpur'));
+  assert.ok(h2.includes('Zon 3 bukan dalam Selangor'));
 });
 await ok('migrasi v5 betulkan rekod lama', async () => {
   const { execFileSync } = await import('node:child_process');
@@ -360,7 +364,7 @@ await ok('migrasi v5 betulkan rekod lama', async () => {
   const out = execFileSync(process.execPath, ['--no-warnings', '--input-type=module', '-e', `const {db}=await import('./db.js'); console.log(JSON.stringify(db.prepare('SELECT nama,negeri,daerah,alamat FROM tempat ORDER BY nama').all()))`], { env });
   fs.rmSync(d2, { recursive: true, force: true });
   assert.deepEqual(JSON.parse(String(out)).map((r) => [r.nama, r.negeri, r.daerah, r.alamat]), [
-    ['A', 'Selangor', null, null], ['B', null, null, 'Jln 2, Shah Alam'], ['C', 'Selangor', 'Petaling', null], ['D', 'W.P. Kuala Lumpur', null, null], ['E', null, null, 'ZON 5']]);
+    ['A', 'Selangor', null, null], ['B', null, null, 'Jln 2, Shah Alam'], ['C', 'Selangor', 'Petaling', null], ['D', 'W.P. Kuala Lumpur', null, null], ['E', 'W.P. Kuala Lumpur', 'Zon 5', null]]);
 });
 
 console.log('Barang dibekalkan');

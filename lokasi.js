@@ -1,11 +1,14 @@
 // Negeri dan daerah rasmi. Daerah hanya dari senarai tetap supaya tapisan konsisten.
-// Selangor: 9 daerah ikut JAIS e-masjid. W.P. Kuala Lumpur dan Putrajaya tiada daerah.
+// Selangor: 9 daerah ikut JAIS e-masjid. W.P. Kuala Lumpur guna Zon JAWI (bukan daerah). Putrajaya tiada.
+// Bilangan zon JAWI: SEMENTARA, sahkan dengan senarai Zon di direktori masjid JAWI.
+export const ZON_KL = 10;
 export const NEGERI = [
   'Selangor', 'W.P. Kuala Lumpur', 'W.P. Putrajaya', 'Negeri Sembilan',
   'Johor', 'Kedah', 'Kelantan', 'Melaka', 'Pahang', 'Perak', 'Perlis', 'Pulau Pinang', 'Sabah', 'Sarawak', 'Terengganu', 'W.P. Labuan',
 ];
 export const DAERAH = {
   Selangor: ['Petaling', 'Gombak', 'Klang', 'Kuala Langat', 'Sepang', 'Hulu Langat', 'Kuala Selangor', 'Hulu Selangor', 'Sabak Bernam'],
+  'W.P. Kuala Lumpur': Array.from({ length: ZON_KL }, (_, i) => `Zon ${i + 1}`),
   'Negeri Sembilan': ['Seremban', 'Port Dickson', 'Jempol', 'Jelebu', 'Kuala Pilah', 'Rembau', 'Tampin'],
 };
 

@@ -168,7 +168,7 @@ ${ph({ title: `Senarai <span class="count">${total}</span>`, right: '' })}
 <div class="filters-3">
 <select name="jenis" aria-label="Jenis">${opt(JENIS, f.jenis, 'Semua jenis')}</select>
 <select name="negeri" aria-label="Negeri">${opt(negeriList, f.negeri, 'Semua negeri')}</select>
-<select name="daerah" aria-label="Daerah">${opt(daerahList, f.daerah, 'Semua daerah')}</select>
+<select name="daerah" aria-label="Daerah atau zon">${opt(daerahList, f.daerah, 'Semua daerah/zon')}</select>
 <select name="status" aria-label="Status">${optStatus(f.status, 'Semua status')}</select></div>
 <label class="check"><input type="checkbox" name="susulan" value="1"${f.susulan ? ' checked' : ''}> Ada tarikh susulan sahaja</label>
 <noscript><button class="btn">Tapis</button></noscript>
@@ -191,7 +191,7 @@ ${errBox(error)}
 <fieldset><legend>Jenis</legend><div class="seg seg-2">${JENIS.map((j) => `<label><input type="radio" name="jenis" value="${j}"${t.jenis === j ? ' checked' : ''}><span>${j}</span></label>`).join('')}</div></fieldset>
 <label>Nama <b class="req">*</b><input name="nama" value="${esc(t.nama)}" required maxlength="200"></label>
 <div class="grid-2"><label>Negeri<select name="negeri" id="negeri"><option value="">-</option>${NEGERI.map((n) => `<option${t.negeri === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
-<label>Daerah<select name="daerah" id="daerah"><option value="">-</option>${Object.entries(DAERAH).map(([n, ds]) => `<optgroup label="${esc(n)}">${ds.map((d) => `<option${t.daerah === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
+<label>Daerah / Zon<select name="daerah" id="daerah"><option value="">-</option>${Object.entries(DAERAH).map(([n, ds]) => `<optgroup label="${esc(n)}">${ds.map((d) => `<option${t.daerah === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
 <label>Alamat<textarea name="alamat" rows="2" maxlength="500">${esc(t.alamat)}</textarea></label>
 <label>Telefon masjid/surau<input name="telefon" type="tel" value="${esc(t.telefon)}" inputmode="tel" maxlength="40" placeholder="cth: 03-7800 1234"></label>
 <label>Status<select name="status">${optStatus(t.status)}</select></label>
@@ -471,7 +471,7 @@ export function dataPage(result = null) {
 <div class="pad stack narrow-col">
 <section class="panel form">
 <h2>Import CSV</h2>
-<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, negeri, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, follow_up, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…), serta <code>vacuum_model, vacuum_unit, vacuum_tarikh_beli, vacuum_penggunaan, vacuum_filter_terakhir, vacuum_catatan, karpet_jenis, karpet_kp, karpet_tarikh_pasang, karpet_waranti_hingga</code>. Daerah mesti daerah rasmi (cth Selangor: Petaling, Gombak, Klang, Kuala Langat, Sepang, Hulu Langat, Kuala Selangor, Hulu Selangor, Sabak Bernam); nama bandar dipindah ke alamat. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
+<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, negeri, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, follow_up, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…), serta <code>vacuum_model, vacuum_unit, vacuum_tarikh_beli, vacuum_penggunaan, vacuum_filter_terakhir, vacuum_catatan, karpet_jenis, karpet_kp, karpet_tarikh_pasang, karpet_waranti_hingga</code>. Daerah mesti daerah rasmi; untuk Kuala Lumpur guna zon JAWI (cth Zon 1). Selangor: Petaling, Gombak, Klang, Kuala Langat, Sepang, Hulu Langat, Kuala Selangor, Hulu Selangor, Sabak Bernam); nama bandar dipindah ke alamat. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
 ${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, ${result.dikemas ? `<b>${result.dikemas}</b> rekod sedia ada ditambah maklumat, ` : ''}<b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
 <form method="post" action="/import" enctype="multipart/form-data">
 <label class="file-btn">Pilih fail CSV<input type="file" name="fail" accept=".csv,text/csv" required></label>
