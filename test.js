@@ -327,6 +327,42 @@ await ok('sandaran penuh tar.gz ada db + lampiran', async () => {
   assert.equal(b.subarray(257, 262).toString(), 'ustar');
 });
 
+console.log('Negeri & daerah');
+await ok('borang: daerah mesti rasmi & dalam negeri dipilih', async () => {
+  const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Lokasi Uji', negeri: 'Selangor', daerah: 'Klang' }));
+  assert.equal(r.status, 303);
+  const lid = idFrom(r.headers.get('location'));
+  assert.ok((await (await req(`/tempat/${lid}`)).text()).includes('Klang, Selangor'));
+  assert.equal((await req(`/tempat/${lid}`, form({ jenis: 'Masjid', nama: 'Masjid Lokasi Uji', negeri: 'W.P. Kuala Lumpur', daerah: 'Petaling' }))).status, 400);
+  assert.equal((await req('/tempat', form({ jenis: 'Masjid', nama: 'X', daerah: 'Shah Alam' }))).status, 400);
+  const r2 = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Daerah Sahaja', daerah: 'hulu langat' }));
+  assert.ok((await (await req(r2.headers.get('location'))).text()).includes('Hulu Langat, Selangor'), 'negeri diisi dari daerah');
+  assert.ok((await (await req('/tempat?negeri=Selangor&daerah=Klang')).text()).includes('Masjid Lokasi Uji'));
+});
+await ok('import: negeri dalam lajur daerah dipindah, bandar ke alamat', async () => {
+  const csv = 'nama,negeri,daerah,alamat\nMasjid Imp KL,,Kuala Lumpur,\nMasjid Imp Bandar,Selangor,Shah Alam,Jln 1\nMasjid Imp Sepang,,Sepang,\n';
+  const fd = new FormData(); fd.append('fail', new Blob([csv]), 'x.csv');
+  const html = await (await req('/import', { method: 'POST', body: fd })).text();
+  assert.ok(html.includes('bukan daerah rasmi'));
+  const det = async (q) => { const l = await (await req('/tempat?q=' + encodeURIComponent(q))).text(); return (await req(`/tempat/${l.match(/\/tempat\/(\d+)"/)[1]}`)).text(); };
+  assert.ok((await det('Imp KL')).includes('W.P. Kuala Lumpur'));
+  const b = await det('Imp Bandar');
+  assert.ok(b.includes('Jln 1, Shah Alam') && b.includes('· Selangor'));
+  assert.ok((await det('Imp Sepang')).includes('Sepang, Selangor'));
+});
+await ok('migrasi v5 betulkan rekod lama', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'masjid-mig-'));
+  const env = { ...process.env, DATA_DIR: d2 };
+  execFileSync(process.execPath, ['--no-warnings', '--input-type=module', '-e', `const {db}=await import('./db.js');
+    db.exec("DROP INDEX idx_tempat_negeri; ALTER TABLE tempat DROP COLUMN negeri; PRAGMA user_version=3");
+    for (const [n,d,a] of [['A','Selangor',null],['B','Shah Alam','Jln 2'],['C','Petaling',null],['D','Kuala Lumpur',null],['E','ZON 5',null]]) db.prepare("INSERT INTO tempat (jenis,nama,daerah,alamat) VALUES ('Masjid',?,?,?)").run(n,d,a);`], { env });
+  const out = execFileSync(process.execPath, ['--no-warnings', '--input-type=module', '-e', `const {db}=await import('./db.js'); console.log(JSON.stringify(db.prepare('SELECT nama,negeri,daerah,alamat FROM tempat ORDER BY nama').all()))`], { env });
+  fs.rmSync(d2, { recursive: true, force: true });
+  assert.deepEqual(JSON.parse(String(out)).map((r) => [r.nama, r.negeri, r.daerah, r.alamat]), [
+    ['A', 'Selangor', null, null], ['B', null, null, 'Jln 2, Shah Alam'], ['C', 'Selangor', 'Petaling', null], ['D', 'W.P. Kuala Lumpur', null, null], ['E', null, null, 'ZON 5']]);
+});
+
 console.log('Barang dibekalkan');
 await ok('vacuum: filter lewat masuk Hari ini, Filter dibeli padam peringatan', async () => {
   const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Vakum Uji', status: 'Pelanggan' }));

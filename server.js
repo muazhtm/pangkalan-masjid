@@ -6,7 +6,7 @@ import path from 'node:path';
 import { db, tx, ROOT, DATA_DIR, UPLOAD_DIR, today, nowKL, addMonths, addDays } from './db.js';
 import {
   JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, JENIS_BARANG, PENGGUNAAN, LALAI, selangFilter,
-  hayatKarpet, cuciAwalHari, waMesej, labelStatus, semuaTetapan, simpanTetapan,
+  hayatKarpet, cuciAwalHari, waMesej, labelStatus, semuaTetapan, simpanTetapan, sahLokasi, NEGERI,
 } from './config.js';
 import { txt, intOrNull, posId, dateOrNull, arr, waNumber, parseCsv, csvCell, likeEscape, senOrNull, fmtRM } from './util.js';
 import * as auth from './auth.js';
@@ -163,6 +163,7 @@ app.get('/tempat', (req, res) => {
   const q = txt(req.query.q, 100) || '';
   const f = {
     jenis: JENIS.includes(req.query.jenis) ? req.query.jenis : '',
+    negeri: NEGERI.includes(req.query.negeri) ? req.query.negeri : '',
     daerah: txt(req.query.daerah, 100) || '',
     status: STATUS.includes(req.query.status) ? req.query.status : '',
     susulan: req.query.susulan === '1' ? '1' : '',
@@ -170,11 +171,12 @@ app.get('/tempat', (req, res) => {
   const where = [];
   const params = [];
   if (q) {
-    where.push(`(t.nama LIKE ? ESCAPE '\\' OR t.alamat LIKE ? ESCAPE '\\' OR t.daerah LIKE ? ESCAPE '\\')`);
+    where.push(`(t.nama LIKE ? ESCAPE '\\' OR t.alamat LIKE ? ESCAPE '\\' OR t.daerah LIKE ? ESCAPE '\\' OR t.negeri LIKE ? ESCAPE '\\')`);
     const p = `%${likeEscape(q)}%`;
-    params.push(p, p, p);
+    params.push(p, p, p, p);
   }
   if (f.jenis) { where.push('t.jenis = ?'); params.push(f.jenis); }
+  if (f.negeri) { where.push('t.negeri = ?'); params.push(f.negeri); }
   if (f.daerah) { where.push('t.daerah = ?'); params.push(f.daerah); }
   if (f.status) { where.push('t.status = ?'); params.push(f.status); }
   if (f.susulan) where.push('t.follow_up IS NOT NULL');
@@ -188,10 +190,11 @@ app.get('/tempat', (req, res) => {
        FROM tempat t ${w} ORDER BY t.nama COLLATE NOCASE LIMIT ? OFFSET ?`
     )
     .all(...params, PAGE, (page - 1) * PAGE);
-  const daerahList = db.prepare(`SELECT DISTINCT daerah FROM tempat WHERE daerah IS NOT NULL ORDER BY daerah COLLATE NOCASE`).all().map((r) => r.daerah);
+  const daerahList = db.prepare(`SELECT DISTINCT daerah FROM tempat WHERE daerah IS NOT NULL ${f.negeri ? 'AND negeri = ?' : ''} ORDER BY daerah COLLATE NOCASE`).all(...(f.negeri ? [f.negeri] : [])).map((r) => r.daerah);
+  const negeriList = db.prepare(`SELECT DISTINCT negeri FROM tempat WHERE negeri IS NOT NULL ORDER BY negeri`).all().map((r) => r.negeri);
   const pilihId = posId(req.query.pilih);
   const pilih = pilihId ? loadDetail(pilihId) : null;
-  res.send(V.listPage({ rows, total, page, pages, q, f, daerahList, pilih, from: (page - 1) * PAGE }));
+  res.send(V.listPage({ rows, total, page, pages, q, f, daerahList, negeriList, pilih, from: (page - 1) * PAGE }));
 });
 
 // ---------- Cipta / kemas kini ----------
@@ -199,7 +202,6 @@ function parseTempat(b) {
   const d = {
     jenis: JENIS.includes(b.jenis) ? b.jenis : null,
     nama: txt(b.nama, 200),
-    daerah: txt(b.daerah, 100),
     alamat: txt(b.alamat, 500),
     telefon: txt(b.telefon, 40),
     status: STATUS.includes(b.status) ? b.status : 'Belum dihubungi',
@@ -210,7 +212,9 @@ function parseTempat(b) {
     catatan: txt(b.catatan, 2000),
   };
   if (d.kitaran_cuci_bulan !== null && (d.kitaran_cuci_bulan < 1 || d.kitaran_cuci_bulan > 60)) d.kitaran_cuci_bulan = null;
-  let error = '';
+  const L = sahLokasi(b.negeri, b.daerah);
+  d.negeri = L.negeri; d.daerah = L.daerah;
+  let error = L.error;
   if (!d.nama) error = 'Nama diperlukan.';
   else if (!d.jenis) error = 'Jenis tidak sah.';
   return { d, error };
@@ -222,8 +226,8 @@ app.post('/tempat', (req, res) => {
   const { d, error } = parseTempat(req.body);
   if (error) return res.status(400).send(V.tempatFormPage(req.body, error));
   const r = db
-    .prepare(`INSERT INTO tempat (jenis,nama,daerah,alamat,telefon,status,produk,kitaran_cuci_bulan,terakhir_cuci,follow_up,catatan) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(d.jenis, d.nama, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan);
+    .prepare(`INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,produk,kitaran_cuci_bulan,terakhir_cuci,follow_up,catatan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(d.jenis, d.nama, d.negeri, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan);
   res.redirect(303, `/tempat/${r.lastInsertRowid}`);
 });
 
@@ -266,8 +270,8 @@ app.post('/tempat/:id', (req, res) => {
   if (!t) return;
   const { d, error } = parseTempat(req.body);
   if (error) return res.status(400).send(V.tempatFormPage({ ...req.body, id: t.id }, error, t.id));
-  db.prepare(`UPDATE tempat SET jenis=?,nama=?,daerah=?,alamat=?,telefon=?,status=?,produk=?,kitaran_cuci_bulan=?,terakhir_cuci=?,follow_up=?,catatan=?,dikemas=datetime('now') WHERE id=?`)
-    .run(d.jenis, d.nama, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan, t.id);
+  db.prepare(`UPDATE tempat SET jenis=?,nama=?,negeri=?,daerah=?,alamat=?,telefon=?,status=?,produk=?,kitaran_cuci_bulan=?,terakhir_cuci=?,follow_up=?,catatan=?,dikemas=datetime('now') WHERE id=?`)
+    .run(d.jenis, d.nama, d.negeri, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan, t.id);
   res.redirect(303, `/tempat/${t.id}`);
 });
 
@@ -626,7 +630,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const head = rows[0].map((h) => h.trim().toLowerCase());
   const col = (name) => head.indexOf(name);
   const PIC_N = ['', ...Array.from({ length: 9 }, (_, i) => String(i + 2))]; // pic, pic2..pic10
-  const names = ['nama', 'jenis', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up'];
+  const names = ['nama', 'jenis', 'negeri', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up'];
   for (const n of PIC_N) names.push('pic' + n, 'jawatan_pic' + n, 'telefon_pic' + n);
   names.push('vacuum_model', 'vacuum_unit', 'vacuum_tarikh_beli', 'vacuum_penggunaan', 'vacuum_filter_terakhir', 'vacuum_catatan', 'karpet_jenis', 'karpet_kp', 'karpet_tarikh_pasang', 'karpet_waranti_hingga');
   const c = Object.fromEntries(names.map((n) => [n, col(n)]));
@@ -672,20 +676,28 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
     }
     return n;
   };
-  const ins = db.prepare('INSERT INTO tempat (jenis,nama,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+  const isiLokasi = db.prepare("UPDATE tempat SET negeri = ?, daerah = ?, dikemas = datetime('now') WHERE id = ?");
   const isiSusulan = db.prepare("UPDATE tempat SET follow_up = ?, dikemas = datetime('now') WHERE id = ? AND follow_up IS NULL");
   const insPic = db.prepare('INSERT INTO pic (tempat_id,nama,jawatan,telefon) VALUES (?,?,?,?)');
   tx(() => {
     rows.slice(1).forEach((r, i) => {
       const nama = get(r, 'nama', 200);
       if (!nama) { out.langkau++; out.amaran.push(`Baris ${i + 2}: tiada nama`); return; }
-      const daerah = get(r, 'daerah', 100);
+      const dRaw = get(r, 'daerah', 100);
+      const L = sahLokasi(get(r, 'negeri', 60), dRaw);
+      if (L.error) out.amaran.push(`Baris ${i + 2}: ${L.error}${dRaw && !L.daerah ? ' Dimasukkan ke alamat.' : ''}`);
+      const bandar = dRaw && !sahLokasi(null, dRaw).negeri ? dRaw : null; // nama bandar, bukan daerah/negeri
+      const daerah = L.daerah;
       if (tambahKeSedia) {
         const m = byName.all(nama);
         if (m.length > 1) { out.langkau++; out.amaran.push(`Baris ${i + 2}: "${nama}" ada ${m.length} rekod sama nama, dilangkau`); return; }
         if (m.length === 1) {
           const fu = dateOrNull(get(r, 'follow_up'));
           if (fu) isiSusulan.run(fu, m[0].id);
+          const t = db.prepare('SELECT negeri, daerah FROM tempat WHERE id = ?').get(m[0].id);
+          if (L.negeri && !t.negeri) isiLokasi.run(L.negeri, L.daerah, m[0].id);
+          else if (L.daerah && t.negeri === L.negeri && !t.daerah) isiLokasi.run(t.negeri, L.daerah, m[0].id);
           addExtras(m[0].id, r); out.dikemas++; return;
         }
       } else if (exists.get(nama, daerah || '')) { out.langkau++; return; }
@@ -696,7 +708,8 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       if (!status) out.amaran.push(`Baris ${i + 2}: status "${stRaw}" tidak dikenali, guna Belum dihubungi`);
       let kitaran = intOrNull(get(r, 'kitaran_cuci_bulan'));
       if (kitaran !== null && (kitaran < 1 || kitaran > 60)) kitaran = null;
-      const id = ins.run(jenis, nama, daerah, get(r, 'alamat'), get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci')), dateOrNull(get(r, 'follow_up'))).lastInsertRowid;
+      const alamat = [get(r, 'alamat'), bandar].filter(Boolean).join(', ') || null;
+      const id = ins.run(jenis, nama, L.negeri, daerah, alamat, get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci')), dateOrNull(get(r, 'follow_up'))).lastInsertRowid;
       addExtras(id, r);
       out.tambah++;
     });
@@ -714,7 +727,7 @@ app.get('/eksport.csv', (req, res) => {
     )
     .all()
     .map((r) => ({ ...r, status: labelStatus(r.status) }));
-  const cols = ['jenis', 'nama', 'daerah', 'alamat', 'telefon', 'pic', 'status', 'keadaan', 'follow_up', 'kitaran_cuci_bulan', 'terakhir_cuci', 'bil_dokumen', 'catatan'];
+  const cols = ['jenis', 'nama', 'negeri', 'daerah', 'alamat', 'telefon', 'pic', 'status', 'keadaan', 'follow_up', 'kitaran_cuci_bulan', 'terakhir_cuci', 'bil_dokumen', 'catatan'];
   const csv = '﻿' + [cols.join(','), ...rows.map((r) => cols.map((k) => csvCell(r[k])).join(','))].join('\r\n');
   res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="masjid-surau.csv"' });
   res.send(csv);

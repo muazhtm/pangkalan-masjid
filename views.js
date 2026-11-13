@@ -1,5 +1,5 @@
 import { esc, waNumber, fmtRM } from './util.js';
-import { JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, JENIS_BARANG, PENGGUNAAN, labelStatus } from './config.js';
+import { JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, JENIS_BARANG, PENGGUNAAN, labelStatus, NEGERI, DAERAH, lokasiTeks } from './config.js';
 
 let currentUser = null;
 export const setUser = (u) => { currentUser = u; };
@@ -139,24 +139,24 @@ ${shown.length ? `<div class="acts">${shown.map(row).join('')}</div>${items.leng
 // ---------------- Senarai ----------------
 function sublineTempat(t) {
   const bits = [esc(t.jenis)];
-  if (t.daerah) bits.push(esc(t.daerah));
+  if (t.daerah || t.negeri) bits.push(esc(t.daerah || t.negeri));
   if (t.follow_up) bits.push(`susulan ${tarikhPendek(t.follow_up)}`);
   else if (t.keadaan) bits.push('karpet: ' + esc(t.keadaan));
   else if (t.kitaran_cuci_bulan && t.status === 'Pelanggan') bits.push(`cucian setiap ${t.kitaran_cuci_bulan} bulan`);
   return bits.join(' · ');
 }
 
-export function listPage({ rows, total, page, pages, q, f, daerahList, pilih, from }) {
+export function listPage({ rows, total, page, pages, q, f, daerahList, negeriList, pilih, from }) {
   const qs = (extra) => {
     const u = new URLSearchParams();
     if (q) u.set('q', q);
-    for (const k of ['jenis', 'daerah', 'status', 'susulan']) if (f[k]) u.set(k, f[k]);
+    for (const k of ['jenis', 'negeri', 'daerah', 'status', 'susulan']) if (f[k]) u.set(k, f[k]);
     for (const [k, v] of Object.entries(extra)) u.set(k, v);
     return '/tempat?' + u.toString();
   };
   const cards = rows.map((t) => `<a class="item" href="/tempat/${t.id}"><div class="grow"><div class="item-t">${esc(t.nama)}</div><div class="item-s">${sublineTempat(t)}</div></div>${badge(t.status)}</a>`).join('');
   const table = `<div class="tbl-wrap"><table class="tbl-list"><thead><tr><th>Nama</th><th>Jenis</th><th>Daerah</th><th>Status</th><th>Susulan</th></tr></thead><tbody>
-${rows.map((t) => `<tr${pilih && pilih.t.id === t.id ? ' class="sel"' : ''}><td><a href="${qs({ page, pilih: t.id })}">${esc(t.nama)}</a></td><td class="muted">${esc(t.jenis)}</td><td class="muted">${esc(t.daerah || '')}</td><td>${badge(t.status)}</td><td>${t.follow_up ? tarikhPendek(t.follow_up) : '<span class="muted">-</span>'}</td></tr>`).join('')}
+${rows.map((t) => `<tr${pilih && pilih.t.id === t.id ? ' class="sel"' : ''}><td><a href="${qs({ page, pilih: t.id })}">${esc(t.nama)}</a></td><td class="muted">${esc(t.jenis)}</td><td class="muted">${esc(lokasiTeks(t))}</td><td>${badge(t.status)}</td><td>${t.follow_up ? tarikhPendek(t.follow_up) : '<span class="muted">-</span>'}</td></tr>`).join('')}
 </tbody></table></div>`;
   const empty = '<p class="panel">Tiada rekod. <a href="/tempat/baru">Tambah satu</a> atau <a href="/data">import CSV</a>.</p>';
   const body = `<div class="split${pilih ? ' has-panel' : ''}"><section class="split-main">
@@ -167,6 +167,7 @@ ${ph({ title: `Senarai <span class="count">${total}</span>`, right: '' })}
 <input type="search" name="q" value="${esc(q)}" placeholder="Cari nama, alamat, daerah" aria-label="Cari">
 <div class="filters-3">
 <select name="jenis" aria-label="Jenis">${opt(JENIS, f.jenis, 'Semua jenis')}</select>
+<select name="negeri" aria-label="Negeri">${opt(negeriList, f.negeri, 'Semua negeri')}</select>
 <select name="daerah" aria-label="Daerah">${opt(daerahList, f.daerah, 'Semua daerah')}</select>
 <select name="status" aria-label="Status">${optStatus(f.status, 'Semua status')}</select></div>
 <label class="check"><input type="checkbox" name="susulan" value="1"${f.susulan ? ' checked' : ''}> Ada tarikh susulan sahaja</label>
@@ -189,7 +190,8 @@ export function tempatFormPage(t = { jenis: 'Surau', status: 'Belum dihubungi' }
 ${errBox(error)}
 <fieldset><legend>Jenis</legend><div class="seg seg-2">${JENIS.map((j) => `<label><input type="radio" name="jenis" value="${j}"${t.jenis === j ? ' checked' : ''}><span>${j}</span></label>`).join('')}</div></fieldset>
 <label>Nama <b class="req">*</b><input name="nama" value="${esc(t.nama)}" required maxlength="200"></label>
-<label>Daerah<input name="daerah" value="${esc(t.daerah)}" maxlength="100"></label>
+<div class="grid-2"><label>Negeri<select name="negeri" id="negeri"><option value="">-</option>${NEGERI.map((n) => `<option${t.negeri === n ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+<label>Daerah<select name="daerah" id="daerah"><option value="">-</option>${Object.entries(DAERAH).map(([n, ds]) => `<optgroup label="${esc(n)}">${ds.map((d) => `<option${t.daerah === d ? ' selected' : ''}>${esc(d)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
 <label>Alamat<textarea name="alamat" rows="2" maxlength="500">${esc(t.alamat)}</textarea></label>
 <label>Telefon masjid/surau<input name="telefon" type="tel" value="${esc(t.telefon)}" inputmode="tel" maxlength="40" placeholder="cth: 03-7800 1234"></label>
 <label>Status<select name="status">${optStatus(t.status)}</select></label>
@@ -269,7 +271,7 @@ ${l.nota ? `<div class="small">${esc(l.nota)}</div>` : ''}
 }
 
 function infoRows(t, lawatan, tarikh) {
-  const mapUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([t.nama, t.alamat, t.daerah].filter(Boolean).join(', '));
+  const mapUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([t.nama, t.alamat, t.daerah, t.negeri].filter(Boolean).join(', '));
   const lw = lawatan[0];
   const produk = String(t.produk || '').split(',').filter((k) => k in TUJUAN).map((k) => TUJUAN[k]);
   return { mapUrl, lw, produk, rows: [
@@ -294,7 +296,7 @@ export function detailPage({ t, pics, lawatan, logs, dokumen, barang, tarikh, se
   const { mapUrl, rows } = infoRows(t, lawatan, tarikh);
   const body = `<header class="ph">
 <div class="ph-top"><a class="ph-back" href="/tempat">‹ Senarai</a><a class="ph-btn" href="/tempat/${t.id}/edit">Edit</a></div>
-<h1>${esc(t.nama)}</h1><div class="ph-sub">${esc(t.jenis)}${t.daerah ? ' · ' + esc(t.daerah) : ''} ${badge(t.status)}</div></header>
+<h1>${esc(t.nama)}</h1><div class="ph-sub">${esc(t.jenis)}${lokasiTeks(t) ? ' · ' + esc(lokasiTeks(t)) : ''} ${badge(t.status)}</div></header>
 <div class="pad stack">
 <section class="panel info">
 ${t.alamat ? `<div>${esc(t.alamat)}</div>` : ''}
@@ -330,7 +332,7 @@ ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
 // Panel kanan di Senarai (komputer)
 function detailPanel({ t, pics, lawatan, logs, dokumen, barang, tarikh, selang }) {
   const { mapUrl, lw, rows } = infoRows(t, lawatan, tarikh);
-  return `<div class="row top"><div><h2 class="m0">${esc(t.nama)}</h2><div class="muted small">${esc(t.jenis)}${t.daerah ? ' · ' + esc(t.daerah) : ''} ${badge(t.status)}</div></div>
+  return `<div class="row top"><div><h2 class="m0">${esc(t.nama)}</h2><div class="muted small">${esc(t.jenis)}${lokasiTeks(t) ? ' · ' + esc(lokasiTeks(t)) : ''} ${badge(t.status)}</div></div>
 <div class="btns"><a class="btn ghost sm" href="/tempat/${t.id}/edit">Edit</a><a class="btn sm" href="/tempat/${t.id}">Buka penuh</a></div></div>
 <div class="kv">
 ${t.alamat ? `<span class="muted">Alamat</span><span>${esc(t.alamat)} · <a class="link-strong" href="${mapUrl}" target="_blank" rel="noopener">Buka peta</a></span>` : ''}
@@ -469,7 +471,7 @@ export function dataPage(result = null) {
 <div class="pad stack narrow-col">
 <section class="panel form">
 <h2>Import CSV</h2>
-<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, follow_up, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…), serta <code>vacuum_model, vacuum_unit, vacuum_tarikh_beli, vacuum_penggunaan, vacuum_filter_terakhir, vacuum_catatan, karpet_jenis, karpet_kp, karpet_tarikh_pasang, karpet_waranti_hingga</code>. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
+<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, negeri, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, follow_up, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…), serta <code>vacuum_model, vacuum_unit, vacuum_tarikh_beli, vacuum_penggunaan, vacuum_filter_terakhir, vacuum_catatan, karpet_jenis, karpet_kp, karpet_tarikh_pasang, karpet_waranti_hingga</code>. Daerah mesti daerah rasmi (cth Selangor: Petaling, Gombak, Klang, Kuala Langat, Sepang, Hulu Langat, Kuala Selangor, Hulu Selangor, Sabak Bernam); nama bandar dipindah ke alamat. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
 ${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, ${result.dikemas ? `<b>${result.dikemas}</b> rekod sedia ada ditambah maklumat, ` : ''}<b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
 <form method="post" action="/import" enctype="multipart/form-data">
 <label class="file-btn">Pilih fail CSV<input type="file" name="fail" accept=".csv,text/csv" required></label>

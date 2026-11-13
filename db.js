@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sahLokasi } from './lokasi.js';
 
 export const ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
@@ -137,6 +138,17 @@ const migrations = [
     );
     CREATE INDEX idx_barang_tempat ON barang(tempat_id);
   `),
+  // v5: negeri berasingan daripada daerah. Daerah hanya nilai rasmi; nama negeri dipindah,
+  // nama tempat/bandar (bukan daerah rasmi) dipindah ke hujung alamat supaya tidak hilang.
+  () => {
+    db.exec('ALTER TABLE tempat ADD COLUMN negeri TEXT; CREATE INDEX idx_tempat_negeri ON tempat(negeri);');
+    const upd = db.prepare('UPDATE tempat SET negeri = ?, daerah = ?, alamat = ? WHERE id = ?');
+    for (const r of db.prepare('SELECT id, daerah, alamat FROM tempat WHERE daerah IS NOT NULL').all()) {
+      const L = sahLokasi(null, r.daerah);
+      if (!L.error) upd.run(L.negeri, L.daerah, r.alamat, r.id);
+      else upd.run(null, null, r.alamat ? (r.alamat.toLowerCase().includes(r.daerah.toLowerCase()) ? r.alamat : `${r.alamat}, ${r.daerah}`) : r.daerah, r.id);
+    }
+  },
 ];
 
 const ver = db.prepare('PRAGMA user_version').get().user_version;

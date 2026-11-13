@@ -1,5 +1,6 @@
 // Senarai tetap (perubahan di sini = perubahan kod) dan tetapan yang boleh diubah dalam app (skrin Tetapan).
 import { db } from './db.js';
+export { NEGERI, DAERAH, sahLokasi, lokasiTeks } from './lokasi.js';
 
 export const JENIS = ['Masjid', 'Surau'];
 // Nilai kanonik yang disimpan dalam pangkalan data. Nama paparan boleh diubah di Tetapan.

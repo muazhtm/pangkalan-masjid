@@ -9,6 +9,26 @@
     a.addEventListener('click', function (e) { e.preventDefault(); history.back(); });
   });
 
+  // Borang masjid: daerah ikut negeri dipilih
+  var neg = document.getElementById('negeri'), dae = document.getElementById('daerah');
+  if (neg && dae) {
+    var syncDaerah = function () {
+      var ada = false;
+      dae.querySelectorAll('optgroup').forEach(function (g) {
+        var ok = !neg.value || g.label === neg.value;
+        g.hidden = !ok; g.disabled = !ok; if (ok) ada = true;
+      });
+      var sel = dae.selectedOptions[0];
+      if (sel && sel.parentNode.tagName === 'OPTGROUP' && sel.parentNode.disabled) dae.value = '';
+      dae.disabled = !!neg.value && !ada;
+    };
+    neg.addEventListener('change', syncDaerah); syncDaerah();
+    dae.addEventListener('change', function () {
+      var g = dae.selectedOptions[0] && dae.selectedOptions[0].parentNode;
+      if (g && g.tagName === 'OPTGROUP' && !neg.value) neg.value = g.label;
+    });
+  }
+
   // Tapis Senarai terus bila pilihan berubah
   document.querySelectorAll('form[data-autosubmit]').forEach(function (f) {
     f.addEventListener('change', function (e) { if (e.target.type !== 'search') f.submit(); });
