@@ -626,7 +626,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const head = rows[0].map((h) => h.trim().toLowerCase());
   const col = (name) => head.indexOf(name);
   const PIC_N = ['', ...Array.from({ length: 9 }, (_, i) => String(i + 2))]; // pic, pic2..pic10
-  const names = ['nama', 'jenis', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci'];
+  const names = ['nama', 'jenis', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up'];
   for (const n of PIC_N) names.push('pic' + n, 'jawatan_pic' + n, 'telefon_pic' + n);
   names.push('vacuum_model', 'vacuum_unit', 'vacuum_tarikh_beli', 'vacuum_penggunaan', 'vacuum_filter_terakhir', 'vacuum_catatan', 'karpet_jenis', 'karpet_kp', 'karpet_tarikh_pasang', 'karpet_waranti_hingga');
   const c = Object.fromEntries(names.map((n) => [n, col(n)]));
@@ -670,7 +670,8 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
     }
     return n;
   };
-  const ins = db.prepare('INSERT INTO tempat (jenis,nama,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci) VALUES (?,?,?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO tempat (jenis,nama,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const isiSusulan = db.prepare("UPDATE tempat SET follow_up = ?, dikemas = datetime('now') WHERE id = ? AND follow_up IS NULL");
   const insPic = db.prepare('INSERT INTO pic (tempat_id,nama,jawatan,telefon) VALUES (?,?,?,?)');
   tx(() => {
     rows.slice(1).forEach((r, i) => {
@@ -680,7 +681,11 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       if (tambahKeSedia) {
         const m = byName.all(nama);
         if (m.length > 1) { out.langkau++; out.amaran.push(`Baris ${i + 2}: "${nama}" ada ${m.length} rekod sama nama, dilangkau`); return; }
-        if (m.length === 1) { addExtras(m[0].id, r); out.dikemas++; return; }
+        if (m.length === 1) {
+          const fu = dateOrNull(get(r, 'follow_up'));
+          if (fu) isiSusulan.run(fu, m[0].id);
+          addExtras(m[0].id, r); out.dikemas++; return;
+        }
       } else if (exists.get(nama, daerah || '')) { out.langkau++; return; }
       const jenisRaw = (get(r, 'jenis') || nama).toLowerCase();
       const jenis = /surau/.test(jenisRaw) ? 'Surau' : 'Masjid';
@@ -689,7 +694,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       if (!status) out.amaran.push(`Baris ${i + 2}: status "${stRaw}" tidak dikenali, guna Belum dihubungi`);
       let kitaran = intOrNull(get(r, 'kitaran_cuci_bulan'));
       if (kitaran !== null && (kitaran < 1 || kitaran > 60)) kitaran = null;
-      const id = ins.run(jenis, nama, daerah, get(r, 'alamat'), get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci'))).lastInsertRowid;
+      const id = ins.run(jenis, nama, daerah, get(r, 'alamat'), get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci')), dateOrNull(get(r, 'follow_up'))).lastInsertRowid;
       addExtras(id, r);
       out.tambah++;
     });

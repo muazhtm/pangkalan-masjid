@@ -289,7 +289,7 @@ await ok('import CSV (semicolon, dup, tanpa nama)', async () => {
   assert.ok((await (await req('/tempat?q=Jamek')).text()).includes('Masjid · Gombak'));
 });
 await ok('import: status, catatan, banyak PIC', async () => {
-  const csv = 'nama,jenis,daerah,status,catatan,pic,jawatan_pic,telefon_pic,pic2,jawatan_pic2,telefon_pic2\nMasjid Multi,Masjid,KL,dah dihubungi,Saiz 1000 kp,Hj A,Nazir,0123456789,Ust B,Imam,0198765432\nSurau Pelik,Surau,KL,zzz,,,,,,,\n';
+  const csv = 'nama,jenis,daerah,status,catatan,follow_up,pic,jawatan_pic,telefon_pic,pic2,jawatan_pic2,telefon_pic2\nMasjid Multi,Masjid,KL,dah dihubungi,Saiz 1000 kp,2026-01-05,Hj A,Nazir,0123456789,Ust B,Imam,0198765432\nSurau Pelik,Surau,KL,zzz,,,,,,,,\n';
   const fd = new FormData(); fd.append('fail', new Blob([csv]), 'x.csv');
   const html = await (await req('/import', { method: 'POST', body: fd })).text();
   assert.ok(html.includes('status &quot;zzz&quot; tidak dikenali'));
@@ -297,6 +297,7 @@ await ok('import: status, catatan, banyak PIC', async () => {
   const mid = list.match(/\/tempat\/(\d+)"/)[1];
   const det = await (await req(`/tempat/${mid}`)).text();
   assert.ok(det.includes('Hj A') && det.includes('Ust B') && det.includes('Saiz 1000 kp') && det.includes('b-dah-dihubungi'));
+  assert.ok((await (await req('/')).text()).includes('Masjid Multi'), 'follow_up diimport -> Hari ini');
 });
 await ok('import tanpa lajur nama ditolak', async () => {
   const fd = new FormData(); fd.append('fail', new Blob(['a,b\n1,2\n']), 'x.csv');
