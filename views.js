@@ -70,7 +70,7 @@ export function layout(title, body, { nav = true, active = '', cls = '' } = {}) 
 <link rel="apple-touch-icon" href="/static/img/ikon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>${esc(title)} · Pangkalan Masjid</title>
-<link rel="stylesheet" href="/static/style.css?v=2">
+<link rel="stylesheet" href="/static/style.css?v=3">
 </head><body class="${nav ? 'has-nav' : 'no-nav'} ${cls}">
 ${nav ? `<aside class="side">
 <a href="/" class="side-logo"><img src="/static/img/logo_mendatar.png" alt="Al Haromain Carpets &amp; Services"></a>
@@ -106,7 +106,10 @@ ${errBox(error)}
 }
 
 // ---------------- Hari ini ----------------
-export function dashboardPage({ tarikh, items, stats, total, hayat, awal }) {
+const pct = (a, b) => (b ? Math.round((a / b) * 100) + '%' : '-');
+const sebabTeks = (sebab, n = 3) => sebab.filter((x) => x.m > 0).sort((a, b) => b.m - a.m).slice(0, n).map((x) => esc(x.teks)).join(' · ');
+
+export function dashboardPage({ tarikh, items, stats, total, hayat, awal, keutamaan = [], kadar = null }) {
   const max = Math.max(1, ...STATUS.map((s) => stats[s] || 0));
   const COL = ['#B7C2B2', '#7FA886', '#4F8F5F', '#1E6B3F', '#C9942E', '#9AA39C'];
   const funnel = STATUS.map((s, i) => `<a class="fn${s === 'Tidak berminat' ? ' fn-last' : ''}${s === 'Pelanggan' ? ' fn-strong' : ''}" href="/tempat?status=${encodeURIComponent(s)}"><span>${esc(labelStatus(s))}</span><div class="fn-bar"><div style="--w:${Math.max(2, Math.round(((stats[s] || 0) / max) * 100))}%;--c:${COL[i]}"></div></div><b>${stats[s] || 0}</b></a>`).join('');
@@ -132,7 +135,16 @@ export function dashboardPage({ tarikh, items, stats, total, hayat, awal }) {
 <section><h2>Tindakan hari ini</h2>
 ${shown.length ? `<div class="acts">${shown.map(row).join('')}</div>${items.length > shown.length ? `<p class="muted small">…dan ${items.length - shown.length} lagi.</p>` : ''}` : '<p class="panel">Tiada tindakan hari ini. Tetapkan <b>tarikh susulan</b> pada setiap masjid/surau supaya ia muncul di sini.</p>'}
 <p class="muted small">Termasuk: tarikh susulan yang tiba, filter beg vacuum, cucian berkala (dipaparkan ${awal} hari lebih awal), dan karpet rosak atau berumur ${hayat} tahun ke atas (anggaran, ubah di Tetapan).</p>
-</section></div>`;
+</section>
+<section><div class="row"><h2>Keutamaan follow-up</h2><span class="muted small">karpet › cucian › vacuum</span></div>
+${keutamaan.length ? `<div class="acts">${keutamaan.map((k) => `<a class="act" href="/tempat/${k.id}"><span class="skor" title="Skor keutamaan">${k.skor}</span><div class="grow"><div class="act-t">${esc(k.nama)}</div><div class="act-s">${sebabTeks(k.sebab)}</div></div><span class="chev" aria-hidden="true">›</span></a>`).join('')}</div>` : '<p class="panel">Belum ada masjid/surau dengan skor. Skor naik bila ada rekod cucian, vacuum, keluasan atau keadaan karpet.</p>'}
+<p class="muted small">Skor: karpet hampir tamat hayat atau rosak +40 (sederhana +20), ditambah +15 jika hubungan sudah ada; cucian sampai masa +35, pelanggan aktif +15, bekas pelanggan +25; keluasan +5 setiap 5,000 kp (maks 25); vacuum +5 setiap pembelian (maks 15); filter beg +10; dihubungi dalam 30 hari −40.</p>
+</section>
+${kadar ? `<section class="panel"><h2>Kadar tukar</h2><div class="kv">
+<span class="muted">Sudah dihubungi</span><span><b>${kadar.dihubungi}</b></span>
+<span class="muted">Jadi pelanggan cucian</span><span><b>${kadar.cuci}</b> (${pct(kadar.cuci, kadar.dihubungi)} daripada yang dihubungi)</span>
+<span class="muted">Pelanggan cucian yang beli karpet</span><span><b>${kadar.cuciKarpet}</b> (${pct(kadar.cuciKarpet, kadar.cuci)})</span></div>
+<p class="muted small">Karpet dikira daripada "Barang dibekalkan: Karpet" atau invois perkhidmatan "Karpet baharu".</p></section>` : ''}</div>`;
   return layout('Hari ini', body, { active: 'hari', cls: 'dash' });
 }
 
@@ -199,6 +211,7 @@ ${errBox(error)}
 ${Object.entries(TUJUAN).map(([k, v]) => `<label class="check"><input type="checkbox" name="produk" value="${k}"${produk.includes(k) ? ' checked' : ''}> ${esc(v)}</label>`).join('')}
 </fieldset>
 <label>Tarikh susulan seterusnya<input type="date" name="follow_up" value="${esc(t.follow_up)}"></label>
+<label>Keluasan karpet (kp)<input name="keluasan_kp" type="number" min="0" step="1" inputmode="numeric" placeholder="cth: 9500" value="${esc(t.keluasan_kp)}"></label>
 <fieldset><legend>Pelanggan cucian berkala (jika ada)</legend><div class="grid-2">
 <label>Cuci setiap (bulan)<input type="number" name="kitaran_cuci_bulan" min="1" max="60" inputmode="numeric" placeholder="cth: 3" value="${esc(t.kitaran_cuci_bulan)}"></label>
 <label>Cucian terakhir<input type="date" name="terakhir_cuci" value="${esc(t.terakhir_cuci)}"></label></div>
@@ -277,6 +290,7 @@ function infoRows(t, lawatan, tarikh) {
   return { mapUrl, lw, produk, rows: [
     t.follow_up ? ['Susulan', bilaSusulan(t.follow_up, tarikh)] : null,
     lw?.keadaan ? ['Karpet (lawatan terkini)', esc(lw.keadaan) + (lw.ukuran.length ? ` · ${fmt(luas(lw.ukuran))} kp` : '')] : null,
+    t.keluasan_kp ? ['Keluasan karpet', `${fmt(t.keluasan_kp)} kp`] : null,
     produk.length ? ['Produk sesuai', esc(produk.join(', '))] : null,
     t.status === 'Pelanggan' && t.kitaran_cuci_bulan ? ['Cucian berkala', `setiap ${t.kitaran_cuci_bulan} bulan${t.terakhir_cuci ? ` · terakhir ${tarikhMy(t.terakhir_cuci)}` : ''}`] : null,
   ].filter(Boolean) };
@@ -292,7 +306,18 @@ ${bekas.length ? `<details class="panel bekas"><summary>Bekas PIC (${bekas.lengt
 <a class="link-strong" href="/tempat/${t.id}/pic/baru">+ Tambah PIC</a>`;
 }
 
-export function detailPage({ t, pics, lawatan, logs, dokumen, barang, tarikh, selang }) {
+function skorPanel(skor) {
+  if (!skor) return '';
+  const top = skor.keluar ? `<b>Dikeluarkan</b> · ${esc(skor.keluar)}` : `<span class="skor">${skor.skor}</span> <b>Skor keutamaan</b>`;
+  return `<div class="skor-box">${top}${skor.sebab.length ? `<ul class="small">${skor.sebab.map((x) => `<li>${x.m > 0 ? '+' : '−'}${Math.abs(x.m)} · ${esc(x.teks)}</li>`).join('')}</ul>` : '<div class="muted small">Belum ada isyarat.</div>'}</div>`;
+}
+function cucianSection(t, cucian, tarikh) {
+  return `${cucian.length ? `<p class="small"><b>${cucian.length}</b> kali dicuci${cucian.length ? ` · terakhir ${tarikhMy(cucian[0].tarikh)}` : ''}</p>` : '<p class="muted small">Belum ada cucian direkod.</p>'}
+${cucian.map((c) => `<div class="row small cucian-r"><span>${tarikhMy(c.tarikh)}${c.catatan ? ` · <span class="muted">${esc(c.catatan)}</span>` : ''}</span><form method="post" action="/cucian/${c.id}/padam" data-confirm="Padam rekod cucian ${tarikhMy(c.tarikh)}?"><button class="linklike danger">Padam</button></form></div>`).join('')}
+<form method="post" action="/tempat/${t.id}/cucian" class="form cucian-f"><div class="grid-2"><label>Tarikh cucian<input type="date" name="tarikh" max="${tarikh}" required></label><label>Catatan<input name="catatan" maxlength="300" placeholder="cth: sebelum Ramadan"></label></div><button class="btn ghost block">+ Rekod cucian</button></form>`;
+}
+
+export function detailPage({ t, pics, lawatan, logs, dokumen, barang, cucian = [], skor, tarikh, selang }) {
   const { mapUrl, rows } = infoRows(t, lawatan, tarikh);
   const body = `<header class="ph">
 <div class="ph-top"><a class="ph-back" href="/tempat">‹ Senarai</a><a class="ph-btn" href="/tempat/${t.id}/edit">Edit</a></div>
@@ -303,6 +328,7 @@ ${t.alamat ? `<div>${esc(t.alamat)}</div>` : ''}
 <div class="grid-2"><a class="btn ghost" href="${mapUrl}" target="_blank" rel="noopener">${icon('peta', 18)} ${t.alamat ? 'Buka peta' : 'Cari di peta'}</a>${t.telefon ? `<a class="btn ghost" href="tel:${esc(t.telefon)}">${icon('telefon', 18)} Telefon ${esc(t.jenis.toLowerCase())}</a>` : ''}</div>
 ${rows.map(([k, v]) => `<div><span class="muted">${k}</span> · ${v}</div>`).join('')}
 ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
+${skorPanel(skor)}
 </section>
 
 <section><h2>PIC dan WhatsApp</h2>
@@ -312,6 +338,9 @@ ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
 <section><h2>Dokumen dihantar</h2>
 <div class="stack-s">${dokumen.map(dokRow).join('')}
 <a class="btn ghost block" href="/tempat/${t.id}/dokumen/baru">+ Rekod dokumen dihantar</a></div></section>
+
+<section id="cucian"><h2>Sejarah cucian</h2>
+<div class="stack-s">${cucianSection(t, cucian, tarikh)}</div></section>
 
 <section><h2>Barang dibekalkan</h2>
 <div class="stack-s">${barangSection(t, barang, selang)}</div></section>
@@ -330,7 +359,7 @@ ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
 }
 
 // Panel kanan di Senarai (komputer)
-function detailPanel({ t, pics, lawatan, logs, dokumen, barang, tarikh, selang }) {
+function detailPanel({ t, pics, lawatan, logs, dokumen, barang, cucian = [], skor, tarikh, selang }) {
   const { mapUrl, lw, rows } = infoRows(t, lawatan, tarikh);
   return `<div class="row top"><div><h2 class="m0">${esc(t.nama)}</h2><div class="muted small">${esc(t.jenis)}${lokasiTeks(t) ? ' · ' + esc(lokasiTeks(t)) : ''} ${badge(t.status)}</div></div>
 <div class="btns"><a class="btn ghost sm" href="/tempat/${t.id}/edit">Edit</a><a class="btn sm" href="/tempat/${t.id}">Buka penuh</a></div></div>
@@ -341,8 +370,10 @@ ${rows.map(([k, v]) => `<span class="muted">${k}</span><span>${v}</span>`).join(
 ${lw?.jenis_karpet ? `<span class="muted">Jenis karpet</span><span>${esc(lw.jenis_karpet)}${lw.tahun_pasang ? ' ± ' + lw.tahun_pasang : ''}</span>` : ''}
 </div>
 ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
+${skorPanel(skor)}
 <div><h3>WhatsApp</h3><div class="stack-s">${picSection(t, pics)}</div></div>
 <div><div class="row"><h3>Dokumen dihantar</h3><a class="btn ghost sm" href="/tempat/${t.id}/dokumen/baru">+ Rekod dokumen</a></div><div class="stack-s">${dokumen.map(dokRow).join('') || '<p class="muted small">Tiada.</p>'}</div></div>
+<div><h3>Sejarah cucian</h3><div class="stack-s">${cucianSection(t, cucian, tarikh)}</div></div>
 <div><h3>Barang dibekalkan</h3><div class="stack-s">${barangSection(t, barang, selang)}</div></div>
 <div><div class="row"><h3>Log hubungan</h3><a class="btn sm" href="/tempat/${t.id}/log/baru">Catat hubungan</a></div>${logs.slice(0, 8).map(logRow).join('') || '<p class="muted small">Belum ada log.</p>'}</div>`;
 }

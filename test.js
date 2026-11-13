@@ -146,7 +146,9 @@ await ok('kitaran cucian pelanggan', async () => {
   assert.ok(html.includes('Cucian berkala') && html.includes('Masjid Pelanggan'));
   // belum tiba masa
   await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Baru Cuci', status: 'Pelanggan', kitaran_cuci_bulan: '6', terakhir_cuci: dateOffset(0) }));
-  assert.ok(!(await (await req('/')).text()).includes('Masjid Baru Cuci'));
+  // belum tiba masa: tiada dalam Tindakan hari ini (boleh muncul dalam Keutamaan sebagai pelanggan aktif)
+  const tindakan = (await (await req('/')).text()).split('<h2>Tindakan hari ini</h2>')[1].split('Keutamaan follow-up')[0];
+  assert.ok(!tindakan.includes('Masjid Baru Cuci'));
 });
 await ok('status PIC: minta jangan hubungi sekat WA untuk PIC itu sahaja', async () => {
   const r = await req(`/pic/${picId()}`, form({ nama: 'Ustaz Ahmad', jawatan: 'Nazir', telefon: '012-904 6605', status: 'Minta jangan hubungi' }));
@@ -420,6 +422,69 @@ await ok('import kemas: tambah ke rekod sedia ada, tiada pendua', async () => {
   assert.equal(det.split('Siak Tanpa Nombor').length - 1, 1, 'PIC tanpa nombor tidak berganda');
   assert.equal((det.match(/Senarai 2024/g) || []).length, 1, 'vacuum tidak berganda');
   assert.equal((await (await req('/tempat?q=Baru%20SEBO')).text()).split('Masjid Baru SEBO').length > 1, true);
+});
+
+console.log('Skor keutamaan & sejarah cucian');
+await ok('skor: pelanggan sampai masa + keluasan + vacuum, sebab dipaparkan', async () => {
+  const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Skor Uji', status: 'Pelanggan', kitaran_cuci_bulan: '3', terakhir_cuci: addMonths(dateOffset(0), -4), keluasan_kp: '10,400' }));
+  const sid = idFrom(r.headers.get('location'));
+  await req(`/tempat/${sid}/barang`, form({ jenis: 'Vacuum', butiran: 'SEBO', penggunaan: 'Digunakan' }));
+  const det = await (await req(`/tempat/${sid}`)).text();
+  // 35 cucian sampai masa + 10 keluasan (10,400 kp) + 5 vacuum = 50
+  assert.ok(det.includes('<span class="skor">50</span>'), 'skor 50');
+  assert.ok(det.includes('Cucian sampai masa') && det.includes('Keluasan 10,400 kp') && det.includes('Beli vacuum 1 kali'));
+  assert.ok(det.includes('Sejarah cucian') && det.includes('<b>1</b> kali dicuci'));
+  const home = (await (await req('/')).text()).split('Keutamaan follow-up</h2>')[1];
+  assert.ok(home.includes('Masjid Skor Uji') && home.includes('Kadar tukar'));
+  // dihubungi -> -40, jatuh ke 10
+  await req(`/tempat/${sid}/log`, form({ saluran: 'Telefon', ringkasan: 'Tanya tarikh cucian' }));
+  assert.ok((await (await req(`/tempat/${sid}`)).text()).includes('<span class="skor">10</span>'));
+});
+await ok('sejarah cucian: tambah, kira, padam selaras cucian terakhir', async () => {
+  const r = await req('/tempat', form({ jenis: 'Surau', nama: 'Surau Sejarah Cuci', status: 'Pelanggan', kitaran_cuci_bulan: '6' }));
+  const sid = idFrom(r.headers.get('location'));
+  const d1 = dateOffset(-400), d2 = dateOffset(-200);
+  assert.equal((await req(`/tempat/${sid}/cucian`, form({ tarikh: d1, catatan: 'sebelum Ramadan' }))).status, 303);
+  await req(`/tempat/${sid}/cucian`, form({ tarikh: d2 }));
+  await req(`/tempat/${sid}/cucian`, form({ tarikh: d2 })); // pendua diabaikan
+  assert.equal((await req(`/tempat/${sid}/cucian`, form({ tarikh: dateOffset(5) }))).status, 400); // masa depan ditolak
+  let det = await (await req(`/tempat/${sid}`)).text();
+  assert.ok(det.includes('<b>2</b> kali dicuci') && det.includes('sebelum Ramadan'));
+  const ids = [...det.matchAll(/\/cucian\/(\d+)\/padam/g)].map((m) => m[1]);
+  await req(`/cucian/${ids[0]}/padam`, form({})); // padam yang terkini (d2)
+  const csv = await (await req('/eksport.csv')).text();
+  const baris = csv.split('\n').find((l) => l.includes('Surau Sejarah Cuci'));
+  assert.ok(baris.includes(d1) && !baris.includes(d2), 'terakhir_cuci kembali ke d1');
+});
+await ok('import: keluasan dari catatan, cucian terakhir masuk sejarah, kemas isi kosong sahaja', async () => {
+  const csv = 'nama,jenis,catatan,terakhir_cuci,status\nMasjid Import Luas,Masjid,"Keluasan (senarai 2024): 14,320 kp; Got response",2025-03-01,Pelanggan\n';
+  const fd = new FormData(); fd.append('fail', new Blob([csv], { type: 'text/csv' }), 'x.csv');
+  await req('/import', { method: 'POST', body: fd });
+  const list = await (await req('/tempat?q=Import%20Luas')).text();
+  const sid = Number(list.match(/\/tempat\/(\d+)"/)[1]);
+  let det = await (await req(`/tempat/${sid}`)).text();
+  assert.ok(det.includes('Keluasan karpet</span> · 14,320 kp') && det.includes('<b>1</b> kali dicuci'));
+  const csv2 = 'nama,keluasan_kp,terakhir_cuci\nMasjid Import Luas,999,2025-09-01\n';
+  const fd2 = new FormData(); fd2.append('fail', new Blob([csv2], { type: 'text/csv' }), 'y.csv'); fd2.set('kemas', '1');
+  await req('/import', { method: 'POST', body: fd2 });
+  det = await (await req(`/tempat/${sid}`)).text();
+  assert.ok(det.includes('Keluasan karpet</span> · 14,320 kp') && !det.includes('999 kp'), 'keluasan sedia ada tidak ditimpa');
+  assert.ok(det.includes('<b>2</b> kali dicuci'));
+});
+await ok('migrasi v6: keluasan dari catatan, cucian terakhir jadi sejarah, idempoten', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const d2 = fs.mkdtempSync(path.join(os.tmpdir(), 'masjid-mig6-'));
+  const env = { ...process.env, DATA_DIR: d2 };
+  execFileSync(process.execPath, ['--no-warnings', '--input-type=module', '-e', `const {db}=await import('./db.js');
+    db.exec("DROP TABLE cucian; ALTER TABLE tempat DROP COLUMN keluasan_kp; PRAGMA user_version=4");
+    db.prepare("INSERT INTO tempat (jenis,nama,catatan,terakhir_cuci) VALUES ('Masjid','M1','Keluasan (senarai 2024): 9,500 kp','2025-01-10')").run();`], { env });
+  const q = `const {db}=await import('./db.js'); console.log(JSON.stringify([db.prepare('SELECT keluasan_kp FROM tempat').get(), db.prepare('SELECT COUNT(*) n FROM cucian').get()]))`;
+  const out = execFileSync(process.execPath, ['--no-warnings', '--input-type=module', '-e', q], { env });
+  assert.deepEqual(JSON.parse(String(out)), [{ keluasan_kp: 9500 }, { n: 1 }]);
+  execFileSync(process.execPath, ['--no-warnings', '--input-type=module', '-e', `const {db}=await import('./db.js'); db.exec('PRAGMA user_version=4');`], { env });
+  const out2 = execFileSync(process.execPath, ['--no-warnings', '--input-type=module', '-e', q], { env });
+  fs.rmSync(d2, { recursive: true, force: true });
+  assert.deepEqual(JSON.parse(String(out2)), [{ keluasan_kp: 9500 }, { n: 1 }]);
 });
 
 console.log('Padam');
