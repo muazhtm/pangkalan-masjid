@@ -424,6 +424,35 @@ await ok('import kemas: tambah ke rekod sedia ada, tiada pendua', async () => {
   assert.equal((await (await req('/tempat?q=Baru%20SEBO')).text()).split('Masjid Baru SEBO').length > 1, true);
 });
 
+await ok('import kemas: rekod lawatan + ukuran, status ke Dilawat, skor karpet, tiada pendua', async () => {
+  await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Lawatan Import', status: 'Belum dihubungi' }));
+  const csv = 'nama,lawatan_tarikh,lawatan_keadaan,lawatan_tahun_pasang,lawatan_nota,lawatan_ukuran\n'
+    + 'masjid lawatan import,2026-09-16,rosak,2021,"Ruang utama banyak koyak","Ruang utama=64.78x79.58; Muslimat=19.619x25.896; salah"\n';
+  const send = async () => { const fd = new FormData(); fd.set('kemas', '1'); fd.append('fail', new Blob([csv]), 'x.csv'); return (await req('/import', { method: 'POST', body: fd })).text(); };
+  const html = await send();
+  assert.match(html, /<b>1<\/b> rekod lawatan ditambah/);
+  assert.ok(html.includes('ukuran &quot;salah&quot; tidak difahami') || html.includes('ukuran "salah" tidak difahami'));
+  assert.doesNotMatch(await send(), /rekod lawatan ditambah/);
+  const sid = (await (await req('/tempat?q=Lawatan%20Import')).text()).match(/\/tempat\/(\d+)"/)[1];
+  const det = await (await req(`/tempat/${sid}`)).text();
+  assert.equal(det.split('Ruang utama banyak koyak').length - 1, 1, 'lawatan tidak berganda');
+  assert.ok(det.includes('Muslimat') && det.includes('Karpet rosak'), 'ukuran dan skor karpet');
+  const baris = (await (await req('/eksport.csv')).text()).split('\n').find((l) => l.includes('Masjid Lawatan Import'));
+  assert.ok(baris.includes('Dilawat') && baris.includes('Rosak'));
+});
+
+await ok('import kemas: lajur keluasan_kp isi rekod tanpa keluasan sahaja', async () => {
+  await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid KP Kosong', status: 'Pelanggan' }));
+  await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid KP Ada', status: 'Pelanggan', keluasan_kp: '5000' }));
+  const fd = new FormData(); fd.set('kemas', '1');
+  fd.append('fail', new Blob(['nama,keluasan_kp\nMasjid KP Kosong,"4,600"\nMasjid KP Ada,9999\n']), 'x.csv');
+  await req('/import', { method: 'POST', body: fd });
+  const csv = (await (await req('/eksport.csv')).text()).split('\n');
+  assert.ok(csv.find((l) => l.includes('Masjid KP Kosong')).includes(',4600,'));
+  const ada = csv.find((l) => l.includes('Masjid KP Ada'));
+  assert.ok(ada.includes(',5000,') && !ada.includes('9999'));
+});
+
 console.log('Skor keutamaan & sejarah cucian');
 await ok('skor: pelanggan sampai masa + keluasan + vacuum, sebab dipaparkan', async () => {
   const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Skor Uji', status: 'Pelanggan', kitaran_cuci_bulan: '3', terakhir_cuci: addMonths(dateOffset(0), -4), keluasan_kp: '10,400' }));

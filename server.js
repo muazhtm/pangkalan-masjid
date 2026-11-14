@@ -689,9 +689,10 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const head = rows[0].map((h) => h.trim().toLowerCase());
   const col = (name) => head.indexOf(name);
   const PIC_N = ['', ...Array.from({ length: 9 }, (_, i) => String(i + 2))]; // pic, pic2..pic10
-  const names = ['nama', 'jenis', 'negeri', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up'];
+  const names = ['nama', 'jenis', 'negeri', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up', 'keluasan_kp'];
   for (const n of PIC_N) names.push('pic' + n, 'jawatan_pic' + n, 'telefon_pic' + n);
-  names.push('vacuum_model', 'vacuum_unit', 'vacuum_tarikh_beli', 'vacuum_penggunaan', 'vacuum_filter_terakhir', 'vacuum_catatan', 'karpet_jenis', 'karpet_kp', 'karpet_tarikh_pasang', 'karpet_waranti_hingga');
+  names.push('vacuum_model', 'vacuum_unit', 'vacuum_tarikh_beli', 'vacuum_penggunaan', 'vacuum_filter_terakhir', 'vacuum_catatan', 'karpet_jenis', 'karpet_kp', 'karpet_tarikh_pasang', 'karpet_waranti_hingga',
+    'lawatan_tarikh', 'lawatan_keadaan', 'lawatan_tahun_pasang', 'lawatan_jenis_karpet', 'lawatan_nota', 'lawatan_ukuran');
   const c = Object.fromEntries(names.map((n) => [n, col(n)]));
   if (c.nama < 0) return res.status(400).send(V.messagePage('Lajur "nama" tiada', 'Baris pertama mesti ada lajur bernama nama.'));
   const get = (r, k, max) => (c[k] >= 0 ? txt(r[c[k]], max) : null);
@@ -700,7 +701,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   for (const s of STATUS) { statusMap.set(s.toLowerCase(), s); statusMap.set(labelStatus(s).toLowerCase(), s); }
 
   const tambahKeSedia = req.body.kemas === '1';
-  const out = { tambah: 0, langkau: 0, dikemas: 0, amaran: [] };
+  const out = { tambah: 0, langkau: 0, dikemas: 0, lawatan: 0, amaran: [] };
   const exists = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?) AND lower(coalesce(daerah, \'\')) = lower(?)');
   const byName = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?)');
   const picTels = db.prepare('SELECT nama, telefon FROM pic WHERE tempat_id = ?');
@@ -733,7 +734,36 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       insBarang.run(id, 'Karpet', kj, null, Number.isFinite(kp) && kp > 0 ? kp : null, kt, dateOrNull(get(r, 'karpet_waranti_hingga')), 'Digunakan', null, null);
       n++;
     }
+    n += addLawatan(id, r);
     return n;
+  };
+  // Lawatan: lajur lawatan_*. lawatan_ukuran = "Label=PANJANGxLEBAR; Label 2=PxL" (kaki).
+  // Lawatan sama tarikh + nota untuk tempat yang sama tidak dimasukkan dua kali (selamat diimport semula).
+  const adaLawatan = db.prepare("SELECT 1 FROM lawatan WHERE tempat_id = ? AND tarikh = ? AND coalesce(nota, '') = coalesce(?, '')");
+  const insLawatan = db.prepare('INSERT INTO lawatan (tempat_id,tarikh,keadaan,jenis_karpet,tahun_pasang,nota) VALUES (?,?,?,?,?,?)');
+  const insUkuran = db.prepare('INSERT INTO ukuran (lawatan_id,label,panjang,lebar) VALUES (?,?,?,?)');
+  const keDilawat = db.prepare("UPDATE tempat SET status = 'Dilawat', dikemas = datetime('now') WHERE id = ? AND status IN ('Belum dihubungi', 'Dah dihubungi')");
+  let barisNo = 0;
+  const addLawatan = (id, r) => {
+    const tarikh = dateOrNull(get(r, 'lawatan_tarikh'));
+    if (!tarikh) return 0;
+    const nota = get(r, 'lawatan_nota', 2000);
+    if (adaLawatan.get(id, tarikh, nota)) return 0;
+    const kd = get(r, 'lawatan_keadaan');
+    const keadaan = kd ? KEADAAN.find((k) => k.toLowerCase() === kd.toLowerCase()) || null : null;
+    if (kd && !keadaan) out.amaran.push(`Baris ${barisNo}: keadaan "${kd}" tidak dikenali, dibiarkan kosong`);
+    const tahun = intOrNull(get(r, 'lawatan_tahun_pasang'));
+    const lid = insLawatan.run(id, tarikh, keadaan, get(r, 'lawatan_jenis_karpet', 100), tahun && tahun >= 1950 && tahun <= 2100 ? tahun : null, nota).lastInsertRowid;
+    for (const bahagian of String(get(r, 'lawatan_ukuran', 4000) || '').split(';')) {
+      if (!bahagian.trim()) continue;
+      const m = bahagian.match(/^\s*(?:(.*?)\s*=\s*)?([\d.]+)\s*[x×*]\s*([\d.]+)\s*$/i);
+      const p = m && Number.parseFloat(m[2]), l = m && Number.parseFloat(m[3]);
+      if (m && p > 0 && l > 0 && p < 3000 && l < 3000) insUkuran.run(lid, txt(m[1], 100), p, l);
+      else out.amaran.push(`Baris ${barisNo}: ukuran "${bahagian.trim()}" tidak difahami, dilangkau`);
+    }
+    keDilawat.run(id);
+    out.lawatan++;
+    return 1;
   };
   const ins = db.prepare('INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up,keluasan_kp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
   const isiKeluasan = db.prepare("UPDATE tempat SET keluasan_kp = ?, dikemas = datetime('now') WHERE id = ? AND keluasan_kp IS NULL");
@@ -748,6 +778,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const insPic = db.prepare('INSERT INTO pic (tempat_id,nama,jawatan,telefon) VALUES (?,?,?,?)');
   tx(() => {
     rows.slice(1).forEach((r, i) => {
+      barisNo = i + 2;
       const nama = get(r, 'nama', 200);
       if (!nama) { out.langkau++; out.amaran.push(`Baris ${i + 2}: tiada nama`); return; }
       const dRaw = get(r, 'daerah', 100);
