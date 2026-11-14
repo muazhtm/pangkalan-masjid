@@ -172,6 +172,20 @@ const migrations = [
       if (kp) upd.run(kp, r.id);
     }
   },
+  // v7: tempahan cucian (kerja yang sudah dijadualkan). Bila siap, jadi baris dalam cucian dan tempahan dibuang.
+  () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tempahan (
+        id INTEGER PRIMARY KEY,
+        tempat_id INTEGER NOT NULL REFERENCES tempat(id) ON DELETE CASCADE,
+        tarikh TEXT NOT NULL,
+        waktu TEXT,
+        catatan TEXT,
+        dicipta TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_tempahan_tarikh ON tempahan(tarikh);
+    `);
+  },
 ];
 
 // "Keluasan (senarai 2024): 14,320 kp" -> 14320. Ambil yang pertama sahaja.

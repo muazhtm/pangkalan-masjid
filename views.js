@@ -47,6 +47,7 @@ const I = {
   peta: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
   fail: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   vacuum: '<path d="M5 20h9a4 4 0 0 0 0-8H9"/><path d="M9 12V4h3"/><circle cx="6" cy="20" r="1.5"/><circle cx="14" cy="20" r="1.5"/>',
+  jadual: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M9 16l2 2 4-4"/>',
   karpet: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M7 5v14M17 5v14M3 12h18"/>',
   larang: '<circle cx="12" cy="12" r="10"/><path d="M4.9 4.9l14.2 14.2"/>',
 };
@@ -54,6 +55,7 @@ const icon = (k, s = 22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24"
 
 const NAV = [
   ['hari', '/', 'Hari ini', 'kalendar'],
+  ['jadual', '/jadual', 'Jadual', 'jadual'],
   ['senarai', '/tempat', 'Senarai', 'senarai'],
   ['baru', '/tempat/baru', 'Masjid baru', 'tambah'],
   ['data', '/data', 'Data', 'data'],
@@ -70,7 +72,7 @@ export function layout(title, body, { nav = true, active = '', cls = '' } = {}) 
 <link rel="apple-touch-icon" href="/static/img/ikon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>${esc(title)} · Pangkalan Masjid</title>
-<link rel="stylesheet" href="/static/style.css?v=3">
+<link rel="stylesheet" href="/static/style.css?v=4">
 </head><body class="${nav ? 'has-nav' : 'no-nav'} ${cls}">
 ${nav ? `<aside class="side">
 <a href="/" class="side-logo"><img src="/static/img/logo_mendatar.png" alt="Al Haromain Carpets &amp; Services"></a>
@@ -113,10 +115,11 @@ export function dashboardPage({ tarikh, items, stats, total, hayat, awal, keutam
   const max = Math.max(1, ...STATUS.map((s) => stats[s] || 0));
   const COL = ['#B7C2B2', '#7FA886', '#4F8F5F', '#1E6B3F', '#C9942E', '#9AA39C'];
   const funnel = STATUS.map((s, i) => `<a class="fn${s === 'Tidak berminat' ? ' fn-last' : ''}${s === 'Pelanggan' ? ' fn-strong' : ''}" href="/tempat?status=${encodeURIComponent(s)}"><span>${esc(labelStatus(s))}</span><div class="fn-bar"><div style="--w:${Math.max(2, Math.round(((stats[s] || 0) / max) * 100))}%;--c:${COL[i]}"></div></div><b>${stats[s] || 0}</b></a>`).join('');
-  const ICON = { susulan: ['telefon', 'ic-merah'], cuci: ['titis', 'ic-biru'], tukar: ['ulang', 'ic-emas'], filter: ['vacuum', 'ic-biru'] };
+  const ICON = { tempahan: ['jadual', 'ic-hijau'], susulan: ['telefon', 'ic-merah'], cuci: ['titis', 'ic-biru'], tukar: ['ulang', 'ic-emas'], filter: ['vacuum', 'ic-biru'] };
   const row = (it) => {
     let sub;
-    if (it.kind === 'susulan') sub = `Hubungi semula · ${bilaSusulan(it.tarikh, tarikh)}`;
+    if (it.kind === 'tempahan') sub = `Cucian ditempah · ${bilaTempahan(it.tarikh, tarikh)}${it.waktu ? ' · ' + esc(it.waktu) : ''}`;
+    else if (it.kind === 'susulan') sub = `Hubungi semula · ${bilaSusulan(it.tarikh, tarikh)}`;
     else if (it.kind === 'filter') sub = `Filter beg ${esc(it.model || 'vacuum')} · ${it.tarikh < tarikh ? `<b class="err">${tarikhPendek(it.tarikh)} (lepas)</b>` : tarikhPendek(it.tarikh)}`;
     else if (it.kind === 'cuci') sub = `Cucian berkala · ${it.tarikh < tarikh ? `<b class="err">${tarikhPendek(it.tarikh)} (lepas)</b>` : tarikhPendek(it.tarikh)}`;
     else sub = esc(it.sub);
@@ -134,7 +137,7 @@ export function dashboardPage({ tarikh, items, stats, total, hayat, awal, keutam
 <section class="panel"><div class="row"><h2>Saluran jualan</h2><span class="muted small">Jumlah ${total}</span></div><div class="funnel">${funnel}</div></section>
 <section><h2>Tindakan hari ini</h2>
 ${shown.length ? `<div class="acts">${shown.map(row).join('')}</div>${items.length > shown.length ? `<p class="muted small">…dan ${items.length - shown.length} lagi.</p>` : ''}` : '<p class="panel">Tiada tindakan hari ini. Tetapkan <b>tarikh susulan</b> pada setiap masjid/surau supaya ia muncul di sini.</p>'}
-<p class="muted small">Termasuk: tarikh susulan yang tiba, filter beg vacuum, cucian berkala (dipaparkan ${awal} hari lebih awal), dan karpet rosak atau berumur ${hayat} tahun ke atas (anggaran, ubah di Tetapan).</p>
+<p class="muted small">Termasuk: cucian yang ditempah (hari ini, esok dan yang belum disahkan siap; senarai penuh di <a href="/jadual">Jadual</a>), tarikh susulan yang tiba, filter beg vacuum, cucian berkala (dipaparkan ${awal} hari lebih awal), dan karpet rosak atau berumur ${hayat} tahun ke atas (anggaran, ubah di Tetapan).</p>
 </section>
 <section><div class="row"><h2>Keutamaan follow-up</h2><span class="muted small">karpet › cucian › vacuum</span></div>
 ${keutamaan.length ? `<div class="acts">${keutamaan.map((k) => `<a class="act" href="/tempat/${k.id}"><span class="skor" title="Skor keutamaan">${k.skor}</span><div class="grow"><div class="act-t">${esc(k.nama)}</div><div class="act-s">${sebabTeks(k.sebab)}</div></div><span class="chev" aria-hidden="true">›</span></a>`).join('')}</div>` : '<p class="panel">Belum ada masjid/surau dengan skor. Skor naik bila ada rekod cucian, vacuum, keluasan atau keadaan karpet.</p>'}
@@ -146,6 +149,21 @@ ${kadar ? `<section class="panel"><h2>Kadar tukar</h2><div class="kv">
 <span class="muted">Pelanggan cucian yang beli karpet</span><span><b>${kadar.cuciKarpet}</b> (${pct(kadar.cuciKarpet, kadar.cuci)})</span></div>
 <p class="muted small">Karpet dikira daripada "Barang dibekalkan: Karpet" atau invois perkhidmatan "Karpet baharu".</p></section>` : ''}</div>`;
   return layout('Hari ini', body, { active: 'hari', cls: 'dash' });
+}
+
+// ---------------- Jadual ----------------
+export function jadualPage({ tarikh, lepas, akan }) {
+  const baris = (w, boleh) => `<div class="act jd"><a class="grow" href="/tempat/${w.tempat_id}#cucian"><div class="act-t">${esc(w.nama)}</div><div class="act-s">${bilaTempahan(w.tarikh, tarikh)}${w.waktu ? ' · ' + esc(w.waktu) : ''}${w.daerah ? ' · ' + esc(w.daerah) : ''}${w.catatan ? ' · ' + esc(w.catatan) : ''}</div></a>
+<span class="btns">${boleh ? `<form method="post" action="/tempahan/${w.id}/siap"><button class="btn-sm">Dah siap</button></form>` : ''}<form method="post" action="/tempahan/${w.id}/padam" data-confirm="Batalkan tempahan ${esc(w.nama)} ${tarikhMy(w.tarikh)}?"><button class="linklike danger">Batal</button></form></span></div>`;
+  const bulan = new Map();
+  for (const w of akan) { const k = w.tarikh.slice(0, 7); if (!bulan.has(k)) bulan.set(k, []); bulan.get(k).push(w); }
+  const blokBulan = [...bulan].map(([k, list]) => `<section><h2>${BULAN_PENUH[Number(k.slice(5)) - 1]} ${k.slice(0, 4)} <span class="muted small">${list.length} kerja</span></h2><div class="acts">${list.map((w) => baris(w, w.tarikh <= tarikh)).join('')}</div></section>`).join('');
+  const body = `${ph({ title: 'Jadual', sub: `${akan.length} kerja akan datang${lepas.length ? ` · ${lepas.length} belum disahkan siap` : ''}` })}
+<div class="pad stack">
+${lepas.length ? `<section><h2>Belum disahkan siap</h2><p class="muted small">Tarikh sudah lepas. Tekan <b>Dah siap</b> supaya ia masuk sejarah cucian, atau Batal jika tidak jadi.</p><div class="acts">${lepas.map((w) => baris(w, true)).join('')}</div></section>` : ''}
+${blokBulan || '<p class="panel">Belum ada tempahan. Buka rekod masjid/surau, pergi ke <b>Sejarah cucian</b> dan tekan <b>Tempah cucian</b>.</p>'}
+</div>`;
+  return layout('Jadual', body, { active: 'jadual' });
 }
 
 // ---------------- Senarai ----------------
@@ -311,13 +329,29 @@ function skorPanel(skor) {
   const top = skor.keluar ? `<b>Dikeluarkan</b> · ${esc(skor.keluar)}` : `<span class="skor">${skor.skor}</span> <b>Skor keutamaan</b>`;
   return `<div class="skor-box">${top}${skor.sebab.length ? `<ul class="small">${skor.sebab.map((x) => `<li>${x.m > 0 ? '+' : '−'}${Math.abs(x.m)} · ${esc(x.teks)}</li>`).join('')}</ul>` : '<div class="muted small">Belum ada isyarat.</div>'}</div>`;
 }
-function cucianSection(t, cucian, tarikh) {
-  return `${cucian.length ? `<p class="small"><b>${cucian.length}</b> kali dicuci${cucian.length ? ` · terakhir ${tarikhMy(cucian[0].tarikh)}` : ''}</p>` : '<p class="muted small">Belum ada cucian direkod.</p>'}
+function bilaTempahan(d, tarikh) {
+  const n = beza(tarikh, d);
+  if (n > 0) return `<b class="err">${tarikhPendek(d)} (${n} hari lalu, dah siap?)</b>`;
+  if (n === 0) return '<b>hari ini</b>';
+  if (n === -1) return '<b>esok</b>';
+  return tarikhPendek(d);
+}
+const WAKTU_TEMPAHAN = ['Pagi', 'Tengah hari', 'Lepas Zohor', 'Petang', 'Malam'];
+function tempahanBlok(t, tempahan, tarikh) {
+  const row = (w) => `<div class="row small cucian-r"><span><b>${tarikhMy(w.tarikh)}</b>${w.waktu ? ' · ' + esc(w.waktu) : ''}${w.catatan ? ` · <span class="muted">${esc(w.catatan)}</span>` : ''}</span><span class="btns">${w.tarikh <= tarikh ? `<form method="post" action="/tempahan/${w.id}/siap"><input type="hidden" name="balik" value="tempat"><button class="btn-sm">Dah siap</button></form>` : ''}<form method="post" action="/tempahan/${w.id}/padam" data-confirm="Batalkan tempahan ${tarikhMy(w.tarikh)}?"><input type="hidden" name="balik" value="tempat"><button class="linklike danger">Batal</button></form></span></div>`;
+  return `<p class="small"><b>Tempahan cucian</b></p>
+${tempahan.map(row).join('') || '<p class="muted small">Tiada tempahan akan datang.</p>'}
+<form method="post" action="/tempat/${t.id}/tempahan" class="form cucian-f"><div class="grid-2"><label>Tarikh cucian<input type="date" name="tarikh" min="${tarikh}" required></label><label>Waktu<select name="waktu"><option value="">(belum pasti)</option>${WAKTU_TEMPAHAN.map((x) => `<option>${x}</option>`).join('')}</select></label></div><label>Catatan<input name="catatan" maxlength="300" placeholder="cth: bawa 3 pekerja"></label><button class="btn block">+ Tempah cucian</button></form>
+<hr class="sep">
+`;
+}
+function cucianSection(t, cucian, tarikh, tempahan = []) {
+  return `${tempahanBlok(t, tempahan, tarikh)}${cucian.length ? `<p class="small"><b>${cucian.length}</b> kali dicuci${cucian.length ? ` · terakhir ${tarikhMy(cucian[0].tarikh)}` : ''}</p>` : '<p class="muted small">Belum ada cucian direkod.</p>'}
 ${cucian.map((c) => `<div class="row small cucian-r"><span>${tarikhMy(c.tarikh)}${c.catatan ? ` · <span class="muted">${esc(c.catatan)}</span>` : ''}</span><form method="post" action="/cucian/${c.id}/padam" data-confirm="Padam rekod cucian ${tarikhMy(c.tarikh)}?"><button class="linklike danger">Padam</button></form></div>`).join('')}
 <form method="post" action="/tempat/${t.id}/cucian" class="form cucian-f"><div class="grid-2"><label>Tarikh cucian<input type="date" name="tarikh" max="${tarikh}" required></label><label>Catatan<input name="catatan" maxlength="300" placeholder="cth: sebelum Ramadan"></label></div><button class="btn ghost block">+ Rekod cucian</button></form>`;
 }
 
-export function detailPage({ t, pics, lawatan, logs, dokumen, barang, cucian = [], skor, tarikh, selang }) {
+export function detailPage({ t, pics, lawatan, logs, dokumen, barang, cucian = [], tempahan = [], skor, tarikh, selang }) {
   const { mapUrl, rows } = infoRows(t, lawatan, tarikh);
   const body = `<header class="ph">
 <div class="ph-top"><a class="ph-back" href="/tempat">‹ Senarai</a><a class="ph-btn" href="/tempat/${t.id}/edit">Edit</a></div>
@@ -340,7 +374,7 @@ ${skorPanel(skor)}
 <a class="btn ghost block" href="/tempat/${t.id}/dokumen/baru">+ Rekod dokumen dihantar</a></div></section>
 
 <section id="cucian"><h2>Sejarah cucian</h2>
-<div class="stack-s">${cucianSection(t, cucian, tarikh)}</div></section>
+<div class="stack-s">${cucianSection(t, cucian, tarikh, tempahan)}</div></section>
 
 <section><h2>Barang dibekalkan</h2>
 <div class="stack-s">${barangSection(t, barang, selang)}</div></section>
@@ -359,7 +393,7 @@ ${skorPanel(skor)}
 }
 
 // Panel kanan di Senarai (komputer)
-function detailPanel({ t, pics, lawatan, logs, dokumen, barang, cucian = [], skor, tarikh, selang }) {
+function detailPanel({ t, pics, lawatan, logs, dokumen, barang, cucian = [], tempahan = [], skor, tarikh, selang }) {
   const { mapUrl, lw, rows } = infoRows(t, lawatan, tarikh);
   return `<div class="row top"><div><h2 class="m0">${esc(t.nama)}</h2><div class="muted small">${esc(t.jenis)}${lokasiTeks(t) ? ' · ' + esc(lokasiTeks(t)) : ''} ${badge(t.status)}</div></div>
 <div class="btns"><a class="btn ghost sm" href="/tempat/${t.id}/edit">Edit</a><a class="btn sm" href="/tempat/${t.id}">Buka penuh</a></div></div>
@@ -373,7 +407,7 @@ ${t.catatan ? `<div class="note">${esc(t.catatan)}</div>` : ''}
 ${skorPanel(skor)}
 <div><h3>WhatsApp</h3><div class="stack-s">${picSection(t, pics)}</div></div>
 <div><div class="row"><h3>Dokumen dihantar</h3><a class="btn ghost sm" href="/tempat/${t.id}/dokumen/baru">+ Rekod dokumen</a></div><div class="stack-s">${dokumen.map(dokRow).join('') || '<p class="muted small">Tiada.</p>'}</div></div>
-<div><h3>Sejarah cucian</h3><div class="stack-s">${cucianSection(t, cucian, tarikh)}</div></div>
+<div><h3>Sejarah cucian</h3><div class="stack-s">${cucianSection(t, cucian, tarikh, tempahan)}</div></div>
 <div><h3>Barang dibekalkan</h3><div class="stack-s">${barangSection(t, barang, selang)}</div></div>
 <div><div class="row"><h3>Log hubungan</h3><a class="btn sm" href="/tempat/${t.id}/log/baru">Catat hubungan</a></div>${logs.slice(0, 8).map(logRow).join('') || '<p class="muted small">Belum ada log.</p>'}</div>`;
 }
@@ -502,8 +536,8 @@ export function dataPage(result = null) {
 <div class="pad stack narrow-col">
 <section class="panel form">
 <h2>Import CSV</h2>
-<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, negeri, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, follow_up, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…), serta <code>vacuum_model, vacuum_unit, vacuum_tarikh_beli, vacuum_penggunaan, vacuum_filter_terakhir, vacuum_catatan, karpet_jenis, karpet_kp, karpet_tarikh_pasang, karpet_waranti_hingga</code>, dan rekod lawatan <code>lawatan_tarikh, lawatan_keadaan, lawatan_tahun_pasang, lawatan_jenis_karpet, lawatan_nota, lawatan_ukuran</code> (ukuran dalam kaki, cth <code>Ruang utama=64.78x79.58; Muslimat=19.6x25.9</code>; lawatan sama tarikh dan nota tidak dimasukkan dua kali; status Belum/Dah dihubungi bertukar ke Dilawat). Daerah mesti daerah rasmi; untuk Kuala Lumpur guna zon JAWI (cth Zon 1). Selangor: Petaling, Gombak, Klang, Kuala Langat, Sepang, Hulu Langat, Kuala Selangor, Hulu Selangor, Sabak Bernam); nama bandar dipindah ke alamat. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
-${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, ${result.dikemas ? `<b>${result.dikemas}</b> rekod sedia ada ditambah maklumat, ` : ''}${result.lawatan ? `<b>${result.lawatan}</b> rekod lawatan ditambah, ` : ''}<b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+<p class="muted small">Baris pertama mesti tajuk lajur. Lajur dikenali: <code>nama, jenis, negeri, daerah, alamat, telefon, status, catatan, kitaran_cuci_bulan, terakhir_cuci, follow_up, pic, jawatan_pic, telefon_pic</code>, dan <code>pic2</code> hingga <code>pic10</code> (dengan <code>jawatan_pic2</code>, <code>telefon_pic2</code>…), serta <code>vacuum_model, vacuum_unit, vacuum_tarikh_beli, vacuum_penggunaan, vacuum_filter_terakhir, vacuum_catatan, karpet_jenis, karpet_kp, karpet_tarikh_pasang, karpet_waranti_hingga</code>, dan rekod lawatan <code>lawatan_tarikh, lawatan_keadaan, lawatan_tahun_pasang, lawatan_jenis_karpet, lawatan_nota, lawatan_ukuran</code> (ukuran dalam kaki, cth <code>Ruang utama=64.78x79.58; Muslimat=19.6x25.9</code>; lawatan sama tarikh dan nota tidak dimasukkan dua kali; status Belum/Dah dihubungi bertukar ke Dilawat), serta tempahan cucian <code>tempahan_tarikh, tempahan_waktu, tempahan_catatan</code>. Daerah mesti daerah rasmi; untuk Kuala Lumpur guna zon JAWI (cth Zon 1). Selangor: Petaling, Gombak, Klang, Kuala Langat, Sepang, Hulu Langat, Kuala Selangor, Hulu Selangor, Sabak Bernam); nama bandar dipindah ke alamat. Nama + daerah yang sudah wujud dilangkau. Pemisah koma atau semicolon, UTF-8.</p>
+${result ? `<div class="ok-box"><b>${result.tambah}</b> rekod ditambah, ${result.dikemas ? `<b>${result.dikemas}</b> rekod sedia ada ditambah maklumat, ` : ''}${result.lawatan ? `<b>${result.lawatan}</b> rekod lawatan ditambah, ` : ''}${result.tempahan ? `<b>${result.tempahan}</b> tempahan cucian ditambah, ` : ''}<b>${result.langkau}</b> dilangkau (sudah wujud / tiada nama).${result.amaran.length ? `<ul class="small">${result.amaran.slice(0, 20).map((a) => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>` : ''}
 <form method="post" action="/import" enctype="multipart/form-data">
 <label class="file-btn">Pilih fail CSV<input type="file" name="fail" accept=".csv,text/csv" required></label>
 <label class="check"><input type="checkbox" name="kemas" value="1"> Jika nama sudah wujud: tambah PIC dan barang baharu ke rekod itu (status dan catatan tidak diubah; negeri, daerah, alamat, telefon dan tarikh susulan diisi jika kosong sahaja)</label>
