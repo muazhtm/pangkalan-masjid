@@ -4,7 +4,7 @@ set -euo pipefail
 APP_DIR=/opt/pangkalan-masjid
 export GIT_SSH_COMMAND="ssh -i /root/.ssh/pangkalan_deploy -o IdentitiesOnly=yes"
 # Sandaran pangkalan data sebelum kemas kini (migrasi skema berlaku semasa mula)
-cd "$APP_DIR" && sudo -u masjid DATA_DIR=/var/lib/pangkalan-masjid /usr/bin/node --no-warnings scripts/sandaran-harian.mjs
+cd "$APP_DIR" && sudo -u masjid DATA_DIR=/var/lib/pangkalan-masjid /usr/bin/node --no-warnings scripts/sandaran-harian.mjs --kemaskini
 git -C "$APP_DIR" pull --ff-only
 npm ci --omit=dev --no-audit --no-fund
 systemctl restart pangkalan-masjid
