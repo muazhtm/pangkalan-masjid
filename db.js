@@ -149,7 +149,38 @@ const migrations = [
       else upd.run(null, null, r.alamat ? (r.alamat.toLowerCase().includes(r.daerah.toLowerCase()) ? r.alamat : `${r.alamat}, ${r.daerah}`) : r.daerah, r.id);
     }
   },
+  // v6: keluasan karpet (kp) sebagai nombor, dan sejarah cucian (satu baris setiap cucian).
+  // Keluasan diambil dari catatan import "Keluasan (...): 14,320 kp"; cucian terakhir sedia ada jadi baris pertama sejarah.
+  () => {
+    // Idempoten: selamat jika dijalankan semula (cth. user_version diturunkan)
+    if (!db.prepare("SELECT 1 FROM pragma_table_info('tempat') WHERE name = 'keluasan_kp'").get()) db.exec('ALTER TABLE tempat ADD COLUMN keluasan_kp REAL');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS cucian (
+        id INTEGER PRIMARY KEY,
+        tempat_id INTEGER NOT NULL REFERENCES tempat(id) ON DELETE CASCADE,
+        tarikh TEXT NOT NULL,
+        catatan TEXT,
+        dicipta TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_cucian_tempat ON cucian(tempat_id, tarikh);
+      INSERT INTO cucian (tempat_id, tarikh) SELECT id, terakhir_cuci FROM tempat t
+        WHERE terakhir_cuci IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cucian c WHERE c.tempat_id = t.id AND c.tarikh = t.terakhir_cuci);
+    `);
+    const upd = db.prepare('UPDATE tempat SET keluasan_kp = ? WHERE id = ?');
+    for (const r of db.prepare('SELECT id, catatan FROM tempat WHERE catatan IS NOT NULL AND keluasan_kp IS NULL').all()) {
+      const kp = keluasanDariTeks(r.catatan);
+      if (kp) upd.run(kp, r.id);
+    }
+  },
 ];
+
+// "Keluasan (senarai 2024): 14,320 kp" -> 14320. Ambil yang pertama sahaja.
+export function keluasanDariTeks(s) {
+  const m = /keluasan[^:\n]*:\s*([\d,]+(?:\.\d+)?)\s*kp/i.exec(String(s || '')) || /keluasan\s+([\d,]+(?:\.\d+)?)\s*kp/i.exec(String(s || ''));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 const ver = db.prepare('PRAGMA user_version').get().user_version;
 for (let v = ver; v < migrations.length; v++) {

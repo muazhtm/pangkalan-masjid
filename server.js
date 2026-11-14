@@ -3,7 +3,8 @@ import multer from 'multer';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { db, tx, ROOT, DATA_DIR, UPLOAD_DIR, today, nowKL, addMonths, addDays } from './db.js';
+import { db, tx, ROOT, DATA_DIR, UPLOAD_DIR, today, nowKL, addMonths, addDays, keluasanDariTeks } from './db.js';
+import { kiraSkor, senaraiKeutamaan, kadarTukar } from './skor.js';
 import {
   JENIS, STATUS, KEADAAN, SALURAN, TUJUAN, WA_TUJUAN, STATUS_PIC, JENIS_DOK, JENIS_BARANG, PENGGUNAAN, LALAI, selangFilter,
   hayatKarpet, cuciAwalHari, waMesej, labelStatus, semuaTetapan, simpanTetapan, sahLokasi, NEGERI,
@@ -154,7 +155,7 @@ app.get('/', (req, res) => {
   const { tarikh, items } = tindakanHariIni();
   const stats = Object.fromEntries(db.prepare('SELECT status, COUNT(*) c FROM tempat GROUP BY status').all().map((r) => [r.status, r.c]));
   const total = db.prepare('SELECT COUNT(*) c FROM tempat').get().c;
-  res.send(V.dashboardPage({ tarikh, items, stats, total, hayat: hayatKarpet(), awal: cuciAwalHari() }));
+  res.send(V.dashboardPage({ tarikh, items, stats, total, hayat: hayatKarpet(), awal: cuciAwalHari(), keutamaan: senaraiKeutamaan(15), kadar: kadarTukar() }));
 });
 
 // ---------- Senarai ----------
@@ -198,6 +199,37 @@ app.get('/tempat', (req, res) => {
 });
 
 // ---------- Cipta / kemas kini ----------
+const kpOrNull = (v) => { const n = Number.parseFloat(String(v ?? '').replace(/,/g, '')); return Number.isFinite(n) && n > 0 && n < 1e7 ? Math.round(n) : null; };
+
+// Sejarah cucian: satu baris setiap cucian. tempat.terakhir_cuci sentiasa = cucian terkini.
+function catatCucian(tempatId, tarikh, catatan = null) {
+  if (!tarikh) return;
+  if (!db.prepare('SELECT 1 FROM cucian WHERE tempat_id = ? AND tarikh = ?').get(tempatId, tarikh)) {
+    db.prepare('INSERT INTO cucian (tempat_id, tarikh, catatan) VALUES (?,?,?)').run(tempatId, tarikh, catatan);
+  }
+  selarasCuci(tempatId);
+}
+// Medan "Cucian terakhir" di borang = baris cucian terkini.
+// Tarikh lebih lewat = cucian baharu (tambah baris). Tarikh lebih awal = pembetulan (ubah baris terkini).
+// Dikosongkan = buang baris terkini.
+function betulkanCuciBorang(tempatId, lama, baru) {
+  const terkini = lama && db.prepare('SELECT id FROM cucian WHERE tempat_id = ? AND tarikh = ? ORDER BY id DESC LIMIT 1').get(tempatId, lama);
+  if (!baru) {
+    if (terkini) db.prepare('DELETE FROM cucian WHERE id = ?').run(terkini.id);
+  } else if (!terkini || baru > lama) {
+    return catatCucian(tempatId, baru);
+  } else if (db.prepare('SELECT 1 FROM cucian WHERE tempat_id = ? AND tarikh = ?').get(tempatId, baru)) {
+    db.prepare('DELETE FROM cucian WHERE id = ?').run(terkini.id);
+  } else {
+    db.prepare('UPDATE cucian SET tarikh = ? WHERE id = ?').run(baru, terkini.id);
+  }
+  selarasCuci(tempatId);
+}
+function selarasCuci(tempatId) {
+  const akhir = db.prepare('SELECT MAX(tarikh) m FROM cucian WHERE tempat_id = ?').get(tempatId).m;
+  db.prepare(`UPDATE tempat SET terakhir_cuci = ?, dikemas = datetime('now') WHERE id = ?`).run(akhir, tempatId);
+}
+
 function parseTempat(b) {
   const d = {
     jenis: JENIS.includes(b.jenis) ? b.jenis : null,
@@ -210,6 +242,7 @@ function parseTempat(b) {
     terakhir_cuci: dateOrNull(b.terakhir_cuci),
     follow_up: dateOrNull(b.follow_up),
     catatan: txt(b.catatan, 2000),
+    keluasan_kp: kpOrNull(b.keluasan_kp),
   };
   if (d.kitaran_cuci_bulan !== null && (d.kitaran_cuci_bulan < 1 || d.kitaran_cuci_bulan > 60)) d.kitaran_cuci_bulan = null;
   const L = sahLokasi(b.negeri, b.daerah);
@@ -226,8 +259,9 @@ app.post('/tempat', (req, res) => {
   const { d, error } = parseTempat(req.body);
   if (error) return res.status(400).send(V.tempatFormPage(req.body, error));
   const r = db
-    .prepare(`INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,produk,kitaran_cuci_bulan,terakhir_cuci,follow_up,catatan) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(d.jenis, d.nama, d.negeri, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan);
+    .prepare(`INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,produk,kitaran_cuci_bulan,terakhir_cuci,follow_up,catatan,keluasan_kp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(d.jenis, d.nama, d.negeri, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan, d.keluasan_kp);
+  if (d.terakhir_cuci) catatCucian(Number(r.lastInsertRowid), d.terakhir_cuci);
   res.redirect(303, `/tempat/${r.lastInsertRowid}`);
 });
 
@@ -250,7 +284,9 @@ function loadDetail(id) {
   const logs = db.prepare('SELECT * FROM log WHERE tempat_id = ? ORDER BY waktu DESC, id DESC LIMIT 50').all(t.id);
   const dokumen = db.prepare('SELECT * FROM dokumen WHERE tempat_id = ? ORDER BY tarikh DESC, id DESC').all(t.id);
   const barang = db.prepare("SELECT * FROM barang WHERE tempat_id = ? ORDER BY penggunaan = 'Tidak digunakan lagi', jenis, id").all(t.id);
-  return { t, pics, lawatan, logs, dokumen, barang, tarikh: today(), selang: selangFilter() };
+  const cucian = db.prepare('SELECT * FROM cucian WHERE tempat_id = ? ORDER BY tarikh DESC, id DESC').all(t.id);
+  const skor = kiraSkor(t.id).get(t.id);
+  return { t, pics, lawatan, logs, dokumen, barang, cucian, skor, tarikh: today(), selang: selangFilter() };
 }
 
 app.get('/tempat/:id', (req, res) => {
@@ -270,8 +306,11 @@ app.post('/tempat/:id', (req, res) => {
   if (!t) return;
   const { d, error } = parseTempat(req.body);
   if (error) return res.status(400).send(V.tempatFormPage({ ...req.body, id: t.id }, error, t.id));
-  db.prepare(`UPDATE tempat SET jenis=?,nama=?,negeri=?,daerah=?,alamat=?,telefon=?,status=?,produk=?,kitaran_cuci_bulan=?,terakhir_cuci=?,follow_up=?,catatan=?,dikemas=datetime('now') WHERE id=?`)
-    .run(d.jenis, d.nama, d.negeri, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan, t.id);
+  tx(() => {
+    db.prepare(`UPDATE tempat SET jenis=?,nama=?,negeri=?,daerah=?,alamat=?,telefon=?,status=?,produk=?,kitaran_cuci_bulan=?,terakhir_cuci=?,follow_up=?,catatan=?,keluasan_kp=?,dikemas=datetime('now') WHERE id=?`)
+      .run(d.jenis, d.nama, d.negeri, d.daerah, d.alamat, d.telefon, d.status, d.produk, d.kitaran_cuci_bulan, d.terakhir_cuci, d.follow_up, d.catatan, d.keluasan_kp, t.id);
+    if (d.terakhir_cuci !== t.terakhir_cuci) betulkanCuciBorang(t.id, t.terakhir_cuci, d.terakhir_cuci);
+  });
   res.redirect(303, `/tempat/${t.id}`);
 });
 
@@ -484,7 +523,7 @@ app.post('/tempat/:id/dokumen', uploadDok.single('fail'), (req, res) => {
       const ring = `${d.jenis} ${d.nombor}${d.perkhidmatan ? ' (' + d.perkhidmatan + ')' : ''} dihantar (${d.tarikh})${d.amaun_sen !== null ? ' · RM ' + fmtRM(d.amaun_sen) : ''}${d.catatan ? ' · ' + d.catatan : ''}`;
       db.prepare('INSERT INTO log (tempat_id,waktu,saluran,ringkasan) VALUES (?,?,?,?)').run(t.id, nowKL(), 'Dokumen', ring);
       if (status && status !== t.status) db.prepare(`UPDATE tempat SET status=?, dikemas=datetime('now') WHERE id=?`).run(status, t.id);
-      if (req.body.kemas_cuci === '1' && d.jenis !== 'Quotation') db.prepare(`UPDATE tempat SET terakhir_cuci=?, dikemas=datetime('now') WHERE id=?`).run(d.tarikh, t.id);
+      if (req.body.kemas_cuci === '1' && d.jenis !== 'Quotation') catatCucian(t.id, d.tarikh, `${d.jenis} ${d.nombor}`);
     });
   } catch (e) {
     removeFiles([file?.filename]);
@@ -547,6 +586,26 @@ app.get('/dokumen/:id/fail', (req, res) => {
   res.sendFile(path.join(UPLOAD_DIR, r.k.fail), (e) => e && !res.headersSent && res.sendStatus(404));
 });
 
+
+// ---------- Sejarah cucian ----------
+app.post('/tempat/:id/cucian', (req, res) => {
+  const t = loadTempat(req, res);
+  if (!t) return;
+  const tarikh = dateOrNull(req.body.tarikh);
+  if (!tarikh || tarikh > today()) return res.status(400).send(V.messagePage('Tarikh tidak sah', 'Masukkan tarikh cucian yang sudah berlaku.', `/tempat/${t.id}`));
+  tx(() => catatCucian(t.id, tarikh, txt(req.body.catatan, 300)));
+  res.redirect(303, `/tempat/${t.id}#cucian`);
+});
+app.post('/cucian/:id/padam', (req, res) => {
+  const id = posId(req.params.id);
+  const c = id && db.prepare('SELECT * FROM cucian WHERE id = ?').get(id);
+  if (!c) return res.status(404).send(V.messagePage('Tidak dijumpai', 'Rekod cucian tidak wujud.'));
+  tx(() => {
+    db.prepare('DELETE FROM cucian WHERE id = ?').run(c.id);
+    selarasCuci(c.tempat_id);
+  });
+  res.redirect(303, `/tempat/${c.tempat_id}#cucian`);
+});
 
 // ---------- Barang dibekalkan (karpet & vacuum) ----------
 function parseBarang(b) {
@@ -676,7 +735,10 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
     }
     return n;
   };
-  const ins = db.prepare('INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+  const ins = db.prepare('INSERT INTO tempat (jenis,nama,negeri,daerah,alamat,telefon,status,catatan,kitaran_cuci_bulan,terakhir_cuci,follow_up,keluasan_kp) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+  const isiKeluasan = db.prepare("UPDATE tempat SET keluasan_kp = ?, dikemas = datetime('now') WHERE id = ? AND keluasan_kp IS NULL");
+  // keluasan_kp: lajur sendiri, atau dari catatan "Keluasan (...): 14,320 kp"
+  const kpBaris = (r) => kpOrNull(get(r, 'keluasan_kp')) || keluasanDariTeks(get(r, 'catatan', 2000));
   const isiLokasi = db.prepare("UPDATE tempat SET negeri = ?, daerah = ?, dikemas = datetime('now') WHERE id = ?");
   // Isi alamat jika kosong, atau ganti jika alamat baru mengandungi alamat lama (cth "Banting" -> alamat penuh JAIS)
   const isiAlamat = db.prepare(`UPDATE tempat SET alamat = ?1, dikemas = datetime('now') WHERE id = ?2
@@ -706,6 +768,10 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
           const t = db.prepare('SELECT negeri, daerah FROM tempat WHERE id = ?').get(m[0].id);
           if (L.negeri && !t.negeri) isiLokasi.run(L.negeri, L.daerah, m[0].id);
           else if (L.daerah && t.negeri === L.negeri && !t.daerah) isiLokasi.run(t.negeri, L.daerah, m[0].id);
+          const kpBaru = kpBaris(r);
+          if (kpBaru) isiKeluasan.run(kpBaru, m[0].id);
+          const cuciBaru = dateOrNull(get(r, 'terakhir_cuci'));
+          if (cuciBaru) catatCucian(m[0].id, cuciBaru);
           addExtras(m[0].id, r); out.dikemas++; return;
         }
       } else if (exists.get(nama, daerah || '')) { out.langkau++; return; }
@@ -717,7 +783,9 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       let kitaran = intOrNull(get(r, 'kitaran_cuci_bulan'));
       if (kitaran !== null && (kitaran < 1 || kitaran > 60)) kitaran = null;
       const alamat = [get(r, 'alamat'), bandar].filter(Boolean).join(', ') || null;
-      const id = ins.run(jenis, nama, L.negeri, daerah, alamat, get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci')), dateOrNull(get(r, 'follow_up'))).lastInsertRowid;
+      const id = ins.run(jenis, nama, L.negeri, daerah, alamat, get(r, 'telefon', 40), status || 'Belum dihubungi', get(r, 'catatan', 2000), kitaran, dateOrNull(get(r, 'terakhir_cuci')), dateOrNull(get(r, 'follow_up')), kpBaris(r)).lastInsertRowid;
+      const cuci = dateOrNull(get(r, 'terakhir_cuci'));
+      if (cuci) catatCucian(Number(id), cuci);
       addExtras(id, r);
       out.tambah++;
     });
@@ -730,12 +798,13 @@ app.get('/eksport.csv', (req, res) => {
     .prepare(
       `SELECT t.*, (SELECT keadaan FROM lawatan WHERE tempat_id=t.id ORDER BY tarikh DESC,id DESC LIMIT 1) keadaan,
         (SELECT group_concat(coalesce(nama,'') || ' ' || coalesce(telefon,'') || CASE WHEN status != 'Aktif' THEN ' [' || status || ']' ELSE '' END, ' | ') FROM pic WHERE tempat_id=t.id) pic,
-        (SELECT count(*) FROM dokumen WHERE tempat_id=t.id) bil_dokumen
+        (SELECT count(*) FROM dokumen WHERE tempat_id=t.id) bil_dokumen,
+        (SELECT count(*) FROM cucian WHERE tempat_id=t.id) bil_cucian
        FROM tempat t ORDER BY t.nama COLLATE NOCASE`
     )
     .all()
     .map((r) => ({ ...r, status: labelStatus(r.status) }));
-  const cols = ['jenis', 'nama', 'negeri', 'daerah', 'alamat', 'telefon', 'pic', 'status', 'keadaan', 'follow_up', 'kitaran_cuci_bulan', 'terakhir_cuci', 'bil_dokumen', 'catatan'];
+  const cols = ['jenis', 'nama', 'negeri', 'daerah', 'alamat', 'telefon', 'pic', 'status', 'keadaan', 'follow_up', 'kitaran_cuci_bulan', 'terakhir_cuci', 'bil_cucian', 'keluasan_kp', 'bil_dokumen', 'catatan'];
   const csv = '﻿' + [cols.join(','), ...rows.map((r) => cols.map((k) => csvCell(r[k])).join(','))].join('\r\n');
   res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="masjid-surau.csv"' });
   res.send(csv);
