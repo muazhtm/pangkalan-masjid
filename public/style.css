@@ -260,3 +260,7 @@ legend { padding: 0; font-size: 13px; color: var(--mut); margin-bottom: 6px; }
 .skor-box ul { margin: 6px 0 0; padding-left: 18px; color: var(--mut); }
 .cucian-r { border-bottom: 1px solid var(--line); padding: 6px 0; }
 .cucian-f { margin-top: 8px; }
+.sep { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+.jd form { margin: 0; }
+.jd .btns { align-items: center; }
+.jd a, .jd a div { text-decoration: none; }

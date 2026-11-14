@@ -453,6 +453,45 @@ await ok('import kemas: lajur keluasan_kp isi rekod tanpa keluasan sahaja', asyn
   assert.ok(ada.includes(',5000,') && !ada.includes('9999'));
 });
 
+console.log('Jadual cucian (tempahan)');
+await ok('tempahan: tempah, Hari ini, Jadual, siap -> sejarah cucian, tiada pendua', async () => {
+  const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Tempahan Uji', status: 'Pelanggan', kitaran_cuci_bulan: '6' }));
+  const sid = idFrom(r.headers.get('location'));
+  assert.equal((await req(`/tempat/${sid}/tempahan`, form({ tarikh: dateOffset(-1) }))).status, 400, 'tarikh lepas ditolak');
+  assert.equal((await req(`/tempat/${sid}/tempahan`, form({ tarikh: dateOffset(1), waktu: 'Pagi', catatan: 'bawa 3 pekerja' }))).status, 303);
+  assert.equal((await req(`/tempat/${sid}/tempahan`, form({ tarikh: dateOffset(1) }))).status, 400, 'tarikh sama ditolak');
+  await req(`/tempat/${sid}/tempahan`, form({ tarikh: dateOffset(30) }));
+  assert.ok((await (await req('/')).text()).includes('Cucian ditempah'), 'esok muncul di Hari ini');
+  const jd = await (await req('/jadual')).text();
+  assert.ok(jd.includes('Masjid Tempahan Uji') && jd.includes('bawa 3 pekerja') && jd.includes('2 kerja akan datang'));
+  const wid = Number(jd.match(/\/tempahan\/(\d+)\/padam/)[1]);
+  assert.equal((await req(`/tempahan/${wid}/siap`, form({}))).status, 400, 'belum sampai tarikh tidak boleh siap');
+  assert.equal((await req('/tempahan/999999/siap', form({}))).status, 404);
+});
+await ok('tempahan: tempahan lepas minta disahkan; siap rekod cucian; batal; cascade', async () => {
+  const sid = idFrom((await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Tempahan Lepas' }))).headers.get('location'));
+  const csv = `nama,tempahan_tarikh,tempahan_waktu,tempahan_catatan\nMasjid Tempahan Lepas,${dateOffset(-2)},Pagi,tempah lama\nMasjid Tempahan Lepas,${dateOffset(-2)},Pagi,tempah lama\n`;
+  const send = async () => { const fd = new FormData(); fd.set('kemas', '1'); fd.append('fail', new Blob([csv]), 'x.csv'); return (await req('/import', { method: 'POST', body: fd })).text(); };
+  assert.match(await send(), /<b>1<\/b> tempahan cucian ditambah/);
+  assert.doesNotMatch(await send(), /tempahan cucian ditambah/, 'import semula tidak berganda');
+  const hari = await (await req('/')).text();
+  assert.ok(hari.includes('2 hari lalu, dah siap?'), 'tempahan lepas di Hari ini');
+  const jd = await (await req('/jadual')).text();
+  assert.ok(jd.includes('Belum disahkan siap'));
+  const wid = Number(jd.match(/\/tempahan\/(\d+)\/siap/)[1]);
+  assert.equal((await req(`/tempahan/${wid}/siap`, form({}))).status, 303);
+  const det = await (await req(`/tempat/${sid}`)).text();
+  assert.ok(det.includes('1</b> kali dicuci') && det.includes('tempah lama'), 'masuk sejarah cucian');
+  assert.ok(!(await (await req('/jadual')).text()).includes('tempah lama'), 'tempahan dibuang selepas siap');
+  // batal + cascade padam rekod
+  await req(`/tempat/${sid}/tempahan`, form({ tarikh: dateOffset(5) }));
+  const w2 = Number((await (await req('/jadual')).text()).match(/\/tempahan\/(\d+)\/padam/)[1]);
+  assert.equal((await req(`/tempahan/${w2}/padam`, form({}))).status, 303);
+  await req(`/tempat/${sid}/tempahan`, form({ tarikh: dateOffset(6) }));
+  await req(`/tempat/${sid}/padam`, form({}));
+  assert.ok(!(await (await req('/jadual')).text()).includes('Masjid Tempahan Lepas'), 'cascade');
+});
+
 console.log('Skor keutamaan & sejarah cucian');
 await ok('skor: pelanggan sampai masa + keluasan + vacuum, sebab dipaparkan', async () => {
   const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Skor Uji', status: 'Pelanggan', kitaran_cuci_bulan: '3', terakhir_cuci: addMonths(dateOffset(0), -4), keluasan_kp: '10,400' }));

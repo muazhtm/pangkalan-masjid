@@ -109,6 +109,10 @@ function validDokFile(file) {
 function tindakanHariIni() {
   const tarikh = today();
   const items = [];
+  // Kerja cucian yang sudah ditempah: yang sudah lepas (belum disahkan siap), hari ini dan esok
+  for (const r of db.prepare(`SELECT t.id, t.nama, w.id AS wid, w.tarikh, w.waktu, w.catatan FROM tempahan w JOIN tempat t ON t.id = w.tempat_id WHERE w.tarikh <= ? ORDER BY w.tarikh, w.id`).all(addDays(tarikh, 1))) {
+    items.push({ kind: 'tempahan', id: r.id, nama: r.nama, tarikh: r.tarikh, waktu: r.waktu, sub: r.catatan });
+  }
   for (const t of db.prepare(`SELECT id, nama, jenis, daerah, status, follow_up FROM tempat WHERE follow_up IS NOT NULL AND follow_up <= ? ORDER BY follow_up, nama`).all(tarikh)) {
     items.push({ kind: 'susulan', id: t.id, nama: t.nama, tarikh: t.follow_up, sub: `${t.jenis}${t.daerah ? ' · ' + t.daerah : ''} · ${labelStatus(t.status)}` });
   }
@@ -285,8 +289,9 @@ function loadDetail(id) {
   const dokumen = db.prepare('SELECT * FROM dokumen WHERE tempat_id = ? ORDER BY tarikh DESC, id DESC').all(t.id);
   const barang = db.prepare("SELECT * FROM barang WHERE tempat_id = ? ORDER BY penggunaan = 'Tidak digunakan lagi', jenis, id").all(t.id);
   const cucian = db.prepare('SELECT * FROM cucian WHERE tempat_id = ? ORDER BY tarikh DESC, id DESC').all(t.id);
+  const tempahan = db.prepare('SELECT * FROM tempahan WHERE tempat_id = ? ORDER BY tarikh, id').all(t.id);
   const skor = kiraSkor(t.id).get(t.id);
-  return { t, pics, lawatan, logs, dokumen, barang, cucian, skor, tarikh: today(), selang: selangFilter() };
+  return { t, pics, lawatan, logs, dokumen, barang, cucian, tempahan, skor, tarikh: today(), selang: selangFilter() };
 }
 
 app.get('/tempat/:id', (req, res) => {
@@ -587,6 +592,46 @@ app.get('/dokumen/:id/fail', (req, res) => {
 });
 
 
+// ---------- Tempahan cucian (jadual kerja) ----------
+const adaTempahan = db.prepare('SELECT 1 FROM tempahan WHERE tempat_id = ? AND tarikh = ?');
+const insTempahan = db.prepare('INSERT INTO tempahan (tempat_id, tarikh, waktu, catatan) VALUES (?,?,?,?)');
+app.post('/tempat/:id/tempahan', (req, res) => {
+  const t = loadTempat(req, res);
+  if (!t) return;
+  const tarikh = dateOrNull(req.body.tarikh);
+  if (!tarikh || tarikh < today()) return res.status(400).send(V.messagePage('Tarikh tidak sah', 'Tarikh tempahan mesti hari ini atau akan datang.', `/tempat/${t.id}#cucian`));
+  if (adaTempahan.get(t.id, tarikh)) return res.status(400).send(V.messagePage('Sudah ditempah', `${t.nama} sudah ada tempahan pada tarikh itu.`, `/tempat/${t.id}#cucian`));
+  insTempahan.run(t.id, tarikh, txt(req.body.waktu, 40), txt(req.body.catatan, 300));
+  res.redirect(303, `/tempat/${t.id}#cucian`);
+});
+function loadTempahan(req, res) {
+  const id = posId(req.params.id);
+  const w = id && db.prepare('SELECT * FROM tempahan WHERE id = ?').get(id);
+  if (!w) { res.status(404).send(V.messagePage('Tidak dijumpai', 'Tempahan tidak wujud.', '/jadual')); return null; }
+  return w;
+}
+app.post('/tempahan/:id/siap', (req, res) => {
+  const w = loadTempahan(req, res);
+  if (!w) return;
+  if (w.tarikh > today()) return res.status(400).send(V.messagePage('Belum sampai tarikhnya', 'Tempahan hanya boleh ditanda siap pada atau selepas tarikhnya.', '/jadual'));
+  tx(() => {
+    catatCucian(w.tempat_id, w.tarikh, w.catatan || null);
+    db.prepare('DELETE FROM tempahan WHERE id = ?').run(w.id);
+  });
+  res.redirect(303, req.body.balik === 'tempat' ? `/tempat/${w.tempat_id}#cucian` : '/jadual');
+});
+app.post('/tempahan/:id/padam', (req, res) => {
+  const w = loadTempahan(req, res);
+  if (!w) return;
+  db.prepare('DELETE FROM tempahan WHERE id = ?').run(w.id);
+  res.redirect(303, req.body.balik === 'tempat' ? `/tempat/${w.tempat_id}#cucian` : '/jadual');
+});
+app.get('/jadual', (req, res) => {
+  const tarikh = today();
+  const semua = db.prepare(`SELECT w.id, w.tarikh, w.waktu, w.catatan, t.id AS tempat_id, t.nama, t.daerah FROM tempahan w JOIN tempat t ON t.id = w.tempat_id ORDER BY w.tarikh, w.id`).all();
+  res.send(V.jadualPage({ tarikh, lepas: semua.filter((x) => x.tarikh < tarikh), akan: semua.filter((x) => x.tarikh >= tarikh) }));
+});
+
 // ---------- Sejarah cucian ----------
 app.post('/tempat/:id/cucian', (req, res) => {
   const t = loadTempat(req, res);
@@ -692,7 +737,8 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const names = ['nama', 'jenis', 'negeri', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up', 'keluasan_kp'];
   for (const n of PIC_N) names.push('pic' + n, 'jawatan_pic' + n, 'telefon_pic' + n);
   names.push('vacuum_model', 'vacuum_unit', 'vacuum_tarikh_beli', 'vacuum_penggunaan', 'vacuum_filter_terakhir', 'vacuum_catatan', 'karpet_jenis', 'karpet_kp', 'karpet_tarikh_pasang', 'karpet_waranti_hingga',
-    'lawatan_tarikh', 'lawatan_keadaan', 'lawatan_tahun_pasang', 'lawatan_jenis_karpet', 'lawatan_nota', 'lawatan_ukuran');
+    'lawatan_tarikh', 'lawatan_keadaan', 'lawatan_tahun_pasang', 'lawatan_jenis_karpet', 'lawatan_nota', 'lawatan_ukuran',
+    'tempahan_tarikh', 'tempahan_waktu', 'tempahan_catatan');
   const c = Object.fromEntries(names.map((n) => [n, col(n)]));
   if (c.nama < 0) return res.status(400).send(V.messagePage('Lajur "nama" tiada', 'Baris pertama mesti ada lajur bernama nama.'));
   const get = (r, k, max) => (c[k] >= 0 ? txt(r[c[k]], max) : null);
@@ -701,7 +747,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   for (const s of STATUS) { statusMap.set(s.toLowerCase(), s); statusMap.set(labelStatus(s).toLowerCase(), s); }
 
   const tambahKeSedia = req.body.kemas === '1';
-  const out = { tambah: 0, langkau: 0, dikemas: 0, lawatan: 0, amaran: [] };
+  const out = { tambah: 0, langkau: 0, dikemas: 0, lawatan: 0, tempahan: 0, amaran: [] };
   const exists = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?) AND lower(coalesce(daerah, \'\')) = lower(?)');
   const byName = db.prepare('SELECT id FROM tempat WHERE lower(nama) = lower(?)');
   const picTels = db.prepare('SELECT nama, telefon FROM pic WHERE tempat_id = ?');
@@ -735,6 +781,11 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
       n++;
     }
     n += addLawatan(id, r);
+    const tt = dateOrNull(get(r, 'tempahan_tarikh'));
+    if (tt && !adaTempahan.get(id, tt)) {
+      insTempahan.run(id, tt, get(r, 'tempahan_waktu', 40), get(r, 'tempahan_catatan', 300));
+      out.tempahan++; n++;
+    }
     return n;
   };
   // Lawatan: lajur lawatan_*. lawatan_ukuran = "Label=PANJANGxLEBAR; Label 2=PxL" (kaki).
