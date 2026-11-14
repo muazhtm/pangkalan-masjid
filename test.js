@@ -441,6 +441,18 @@ await ok('import kemas: rekod lawatan + ukuran, status ke Dilawat, skor karpet, 
   assert.ok(baris.includes('Dilawat') && baris.includes('Rosak'));
 });
 
+await ok('import kemas: lajur keluasan_kp isi rekod tanpa keluasan sahaja', async () => {
+  await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid KP Kosong', status: 'Pelanggan' }));
+  await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid KP Ada', status: 'Pelanggan', keluasan_kp: '5000' }));
+  const fd = new FormData(); fd.set('kemas', '1');
+  fd.append('fail', new Blob(['nama,keluasan_kp\nMasjid KP Kosong,"4,600"\nMasjid KP Ada,9999\n']), 'x.csv');
+  await req('/import', { method: 'POST', body: fd });
+  const csv = (await (await req('/eksport.csv')).text()).split('\n');
+  assert.ok(csv.find((l) => l.includes('Masjid KP Kosong')).includes(',4600,'));
+  const ada = csv.find((l) => l.includes('Masjid KP Ada'));
+  assert.ok(ada.includes(',5000,') && !ada.includes('9999'));
+});
+
 console.log('Skor keutamaan & sejarah cucian');
 await ok('skor: pelanggan sampai masa + keluasan + vacuum, sebab dipaparkan', async () => {
   const r = await req('/tempat', form({ jenis: 'Masjid', nama: 'Masjid Skor Uji', status: 'Pelanggan', kitaran_cuci_bulan: '3', terakhir_cuci: addMonths(dateOffset(0), -4), keluasan_kp: '10,400' }));

@@ -689,7 +689,7 @@ app.post('/import', csvUpload.single('fail'), (req, res) => {
   const head = rows[0].map((h) => h.trim().toLowerCase());
   const col = (name) => head.indexOf(name);
   const PIC_N = ['', ...Array.from({ length: 9 }, (_, i) => String(i + 2))]; // pic, pic2..pic10
-  const names = ['nama', 'jenis', 'negeri', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up'];
+  const names = ['nama', 'jenis', 'negeri', 'daerah', 'alamat', 'telefon', 'status', 'catatan', 'kitaran_cuci_bulan', 'terakhir_cuci', 'follow_up', 'keluasan_kp'];
   for (const n of PIC_N) names.push('pic' + n, 'jawatan_pic' + n, 'telefon_pic' + n);
   names.push('vacuum_model', 'vacuum_unit', 'vacuum_tarikh_beli', 'vacuum_penggunaan', 'vacuum_filter_terakhir', 'vacuum_catatan', 'karpet_jenis', 'karpet_kp', 'karpet_tarikh_pasang', 'karpet_waranti_hingga',
     'lawatan_tarikh', 'lawatan_keadaan', 'lawatan_tahun_pasang', 'lawatan_jenis_karpet', 'lawatan_nota', 'lawatan_ukuran');
