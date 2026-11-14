@@ -109,6 +109,7 @@ $DOMAIN {
   reverse_proxy 127.0.0.1:3000
 }
 EOF
+[ -f "$APP_DIR/deploy/Caddyfile.laman" ] && cat "$APP_DIR/deploy/Caddyfile.laman" >> /etc/caddy/Caddyfile
 systemctl reload caddy || systemctl restart caddy
 
 sleep 2

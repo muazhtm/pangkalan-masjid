@@ -1,0 +1,14 @@
+
+# Laman web syarikat (fail statik dalam repo ini: website/). Dikemas kini oleh kemaskini.sh (git pull).
+alharomain.my {
+  encode gzip
+  root * /opt/pangkalan-masjid/website
+  header Strict-Transport-Security "max-age=31536000"
+  @img path /img/*
+  header @img Cache-Control "public, max-age=2592000"
+  file_server
+}
+
+www.alharomain.my {
+  redir https://alharomain.my{uri} permanent
+}
