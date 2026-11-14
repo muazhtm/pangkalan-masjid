@@ -63,16 +63,18 @@ section{padding:80px 0}
 .head p{color:var(--mut)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}
 .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px;display:grid;gap:10px;align-content:start}
+.card.feature{grid-column:1/-1;grid-template-columns:1.4fr 1fr;gap:28px;border:2px solid var(--gold);align-items:center}.card.feature h3{font-size:1.6rem}.card.feature li{font-size:1.05rem}
+@media(max-width:700px){.card.feature{grid-template-columns:1fr;gap:14px}}
 .card p,.card li{color:var(--mut);font-size:.98rem}
 .card ul{margin:0;padding-left:1.1em}
 .band{background:var(--g);color:#fff}
 .band h2,.band h3{color:#fff}.band .eyebrow{color:var(--gold-l)}.band p{color:#D8E3DD}
 .method{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
 .facts{list-style:none;margin:0;padding:0;display:grid;gap:14px}
-.facts li{display:flex;gap:14px;padding:18px 20px;border:1px solid rgba(232,196,106,.35);border-radius:14px;background:rgba(255,255,255,.04)}
-.facts b{font-family:Cinzel,serif;color:var(--gold-l);font-size:1.05rem;line-height:1.3;flex:0 0 6.5em}
+.facts li{display:flex;gap:14px;padding:16px 20px;border:1px solid var(--line);border-radius:14px;background:var(--cream);color:var(--mut)}
+.facts b{font-family:Cinzel,serif;color:var(--g);font-size:1.05rem;line-height:1.3;flex:0 0 6.5em}
 .steps{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
-.steps span{border:1px solid var(--gold);color:var(--gold-l);border-radius:999px;padding:.3em 1em;font-weight:600;font-size:.95rem}
+.steps span{border:1px solid var(--gold);color:var(--gold-d);border-radius:999px;padding:.3em 1em;font-weight:600;font-size:.95rem}
 @media(max-width:860px){.method{grid-template-columns:1fr;gap:28px}section{padding:56px 0}}
 /* galeri */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
@@ -124,15 +126,15 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
     <div>
       <p class="eyebrow">Al Haromain Carpets &amp; Services</p>
       <h1>Pakar Karpet Masjid.<br><em>Bekal. Pasang. Cuci. Baik-pulih.</em></h1>
-      <p class="lede">Kami bekal dan pasang karpet untuk masjid, surau, pejabat, hotel dan dewan, serta mencuci dan membaik-pulih karpet sedia ada. Satu syarikat untuk keseluruhan ruang solat anda.</p>
+      <p class="lede">Kami bekal dan pasang karpet baharu untuk masjid, surau, pejabat, hotel dan dewan. Karpet sedia ada pula kami cuci dan baik-pulih. Satu syarikat untuk keseluruhan ruang solat anda.</p>
       <div class="cta">
-        <a class="btn" href="https://wa.me/60129046605?text=Assalamualaikum%2C%20saya%20ingin%20minta%20sebut%20harga." rel="noopener">Minta sebut harga di WhatsApp</a>
-        <a class="btn line" href="#galeri">Lihat kerja kami</a>
+        <a class="btn" href="https://wa.me/60129046605?text=Assalamualaikum%2C%20saya%20ingin%20minta%20sebut%20harga%20bekal%20dan%20pasang%20karpet." rel="noopener">Minta sebut harga karpet</a>
+        <a class="btn line" href="#servis">Lihat perkhidmatan</a>
       </div>
     </div>
     <figure>
-      <img src="img/hero.jpg" width="800" height="600" alt="Pekerja Al Haromain mencuci karpet dewan solat dengan mesin pencuci karpet">
-      <figcaption>Cucian karpet di dewan solat masjid.</figcaption>
+      <img src="img/hero.jpg" width="800" height="600" alt="Karpet dewan solat masjid yang diselenggara Al Haromain">
+      <figcaption>Karpet dewan solat masjid.</figcaption>
     </figure>
   </div>
 </section>
@@ -144,7 +146,7 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
       <h2>Dari karpet baharu hingga penjagaan berkala</h2>
     </div>
     <div class="cards">
-      <article class="card"><h3>Bekal &amp; pasang karpet</h3><p>Karpet untuk pelbagai jenis premis:</p><ul><li>Masjid dan surau</li><li>Pejabat (wall-to-wall dan carpet tiles)</li><li>Hotel dan dewan</li><li>Karpet custom, majlis dan rumput</li></ul></article>
+      <article class="card feature"><div><p class="eyebrow">Perkhidmatan utama</p><h3>Bekal &amp; pasang karpet</h3><p>Karpet baharu untuk ruang solat dan premis anda, dibekal dan dipasang oleh krew kami. Beritahu kami lokasi, anggaran keluasan dan jenis premis, dan kami sediakan sebut harga.</p><a class="btn" href="https://wa.me/60129046605?text=Assalamualaikum%2C%20saya%20ingin%20minta%20sebut%20harga%20bekal%20dan%20pasang%20karpet." rel="noopener" style="justify-self:start;margin-top:8px">Minta sebut harga karpet</a></div><ul><li>Masjid dan surau</li><li>Pejabat (wall-to-wall dan carpet tiles)</li><li>Hotel dan dewan</li><li>Karpet custom, majlis dan rumput</li></ul></article>
       <article class="card"><h3>Cucian karpet</h3><p>Cucian karpet masjid, surau dan pejabat, sama ada sekali sahaja atau pakej berkala sepanjang tahun.</p></article>
       <article class="card"><h3>Baik-pulih karpet</h3><p>Kerja baik-pulih untuk karpet sedia ada. Hubungi kami dengan gambar dan lokasi untuk penilaian.</p></article>
       <article class="card"><h3>Wallpaper &amp; lantai</h3><p>Pemasangan wallpaper serta lantai SPC dan vinyl.</p></article>
@@ -152,12 +154,12 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
   </div>
 </section>
 
-<section id="cucian" class="band">
+<section id="cucian" style="background:#fff;border-block:1px solid var(--line);padding:56px 0">
   <div class="wrap method">
     <div>
-      <p class="eyebrow">Kaedah cucian</p>
-      <h2 style="margin:10px 0 16px">Dewan solat boleh digunakan semula dengan cepat</h2>
-      <p>Kami menggunakan mesin yang menyedut air dan sabun serta-merta, tanpa blower. Mesin menggunakan sedikit air, dan karpet biasanya sudah kering dalam masa 1 hingga 2 jam.</p>
+      <p class="eyebrow">Perkhidmatan tambahan: cucian karpet</p>
+      <h2 style="margin:10px 0 16px;font-size:clamp(1.4rem,2.6vw,1.9rem)">Dewan solat boleh digunakan semula dengan cepat</h2>
+      <p style="color:var(--mut)">Kami menggunakan mesin yang menyedut air dan sabun serta-merta, tanpa blower. Mesin menggunakan sedikit air, dan karpet biasanya sudah kering dalam masa 1 hingga 2 jam.</p>
       <div class="steps" aria-label="Tiga peringkat cucian"><span>1. Penyediaan</span><span>2. Cucian</span><span>3. Akhiran</span></div>
     </div>
     <ul class="facts">
@@ -172,7 +174,7 @@ footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
   <div class="wrap">
     <div class="head">
       <p class="eyebrow">Galeri</p>
-      <h2>Kerja sebenar kami di masjid dan surau</h2>
+      <h2>Galeri cucian karpet</h2>
       <p>Gambar sebenar kerja cucian karpet oleh krew Al Haromain.</p>
     </div>
     <div class="grid">
